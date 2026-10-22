@@ -11,10 +11,16 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-from src.scraper.screener_scraper import ScreenerScraper
-from src.prediction.forecasting_engine import FinancialStatementForecaster
-from src.valuation.dcf_model import DCFValuationEngine
-from src.excel.workbook_builder import WorkbookBuilder
+try:
+    from src.scraper.screener_scraper import ScreenerScraper
+    from src.prediction.forecasting_engine import FinancialStatementForecaster
+    from src.valuation.dcf_model import DCFValuationEngine
+    from src.excel.workbook_builder import WorkbookBuilder
+except ImportError:
+    from screener_scraper import ScreenerScraper
+    from forecasting_engine import FinancialStatementForecaster
+    from dcf_model import DCFValuationEngine
+    from workbook_builder import WorkbookBuilder
 
 # Page configuration
 st.set_page_config(
