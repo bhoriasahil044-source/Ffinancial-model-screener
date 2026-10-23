@@ -1,12 +1,16 @@
 """
 Financial Model & DCF Valuation Screener
 Professional TradingView & Bloomberg-inspired dark terminal interface
-Built with Streamlit, Plotly, and OpenPyXL.
+Enhanced with Live Company Autocomplete, Multi-Source Market Links,
+and Real-Time News Catalyst Sentiment & Predictive Valuation Modeling.
 """
 
 import os
 import sys
 import io
+import re
+import urllib.parse
+from typing import Dict, Any, List, Optional
 
 # Prioritize current application directory in sys.path for Streamlit Cloud
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +20,7 @@ if CURRENT_DIR not in sys.path:
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
 import plotly.graph_objects as go
 import plotly.express as px
 
@@ -29,6 +34,7 @@ try:
     )
     from dcf_model import DCFValuationEngine, ValuationValidationError
     from workbook_builder import WorkbookBuilder
+    from news_sentiment_engine import NewsSentimentEngine
 except ImportError:
     from src.scraper.screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
@@ -39,6 +45,7 @@ except ImportError:
     )
     from src.valuation.dcf_model import DCFValuationEngine, ValuationValidationError
     from src.excel.workbook_builder import WorkbookBuilder
+    from src.news.news_sentiment_engine import NewsSentimentEngine
 
 # Page configuration
 st.set_page_config(
@@ -103,10 +110,24 @@ st.markdown("""
         border-radius: 4px;
         border: 1px solid #30363d;
     }
+    .external-hub-link {
+        font-size: 0.8rem;
+        color: #58a6ff;
+        text-decoration: none;
+        background: rgba(88, 166, 255, 0.1);
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(88, 166, 255, 0.2);
+        margin-right: 6px;
+    }
+    .external-hub-link:hover {
+        background: rgba(88, 166, 255, 0.2);
+        color: #79c0ff;
+    }
     .company-meta {
         font-size: 0.8rem;
         color: #8b949e;
-        margin-top: 5px;
+        margin-top: 6px;
     }
 
     /* KPI metric strip */
@@ -149,6 +170,73 @@ st.markdown("""
         font-weight: 600;
         color: #f85149;
         margin-top: 2px;
+    }
+
+    /* News card container */
+    .news-card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+        transition: border-color 0.2s ease;
+    }
+    .news-card:hover {
+        border-color: #58a6ff;
+    }
+    .news-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #f0f6fc;
+        margin-bottom: 6px;
+        line-height: 1.4;
+    }
+    .news-meta {
+        font-size: 0.78rem;
+        color: #8b949e;
+        margin-bottom: 8px;
+    }
+    .badge-pos {
+        color: #3fb950;
+        background: rgba(63, 185, 80, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .badge-neg {
+        color: #f85149;
+        background: rgba(248, 81, 73, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .badge-neu {
+        color: #8b949e;
+        background: rgba(139, 148, 158, 0.15);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .badge-cat {
+        color: #58a6ff;
+        background: rgba(56, 189, 248, 0.12);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 500;
+        margin-left: 6px;
+    }
+    .news-link {
+        font-size: 0.8rem;
+        color: #58a6ff;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .news-link:hover {
+        text-decoration: underline;
     }
 
     /* Discreet terminal disclaimer */
@@ -243,32 +331,87 @@ def apply_market_theme(fig, title="", height=380, show_legend=True, xaxis_title=
 
 
 # -----------------------------------------------------------------------------
-# SIDEBAR CONTROLS
+# COMPANY AUTOCOMPLETE & SEARCH API
 # -----------------------------------------------------------------------------
-st.sidebar.markdown("<div class='sidebar-section-title'>Company Selection</div>", unsafe_allow_html=True)
+@st.cache_data(ttl=900, show_spinner=False)
+def search_screener_companies(query: str) -> List[Dict[str, str]]:
+    """Queries Screener.in autocomplete API to return matching listed companies."""
+    if not query or len(query.strip()) < 2:
+        return []
+    try:
+        url = f"https://www.screener.in/api/company/search/?q={urllib.parse.quote(query.strip())}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=4)
+        if r.status_code == 200:
+            results = []
+            for item in r.json():
+                c_name = item.get('name', '').strip()
+                raw_path = item.get('url', '').strip()
+                ticker_match = re.search(r'/company/([^/]+)/', raw_path)
+                ticker_str = ticker_match.group(1) if ticker_match else ""
+                full_url = f"https://www.screener.in{raw_path}"
+                results.append({
+                    'name': c_name,
+                    'ticker': ticker_str,
+                    'url': full_url,
+                    'display': f"{c_name} ({ticker_str})" if ticker_str else c_name
+                })
+            return results
+    except Exception:
+        pass
+    return []
 
-presets = {
-    "Tata Steel (Metals)": "https://www.screener.in/company/TATASTEEL/consolidated/",
-    "Hindustan Unilever (FMCG)": "https://www.screener.in/company/HINDUNILVR/",
-    "TCS (IT Services)": "https://www.screener.in/company/TCS/",
-    "Reliance Industries (Energy)": "https://www.screener.in/company/RELIANCE/consolidated/",
-    "Custom URL": ""
-}
 
-selected_preset = st.sidebar.selectbox("Quick Presets", options=list(presets.keys()), index=0)
+# -----------------------------------------------------------------------------
+# SIDEBAR CONTROLS (Live Autocomplete Search + Presets)
+# -----------------------------------------------------------------------------
+st.sidebar.markdown("<div class='sidebar-section-title'>Company Search</div>", unsafe_allow_html=True)
 
-default_target_url = presets[selected_preset] if presets[selected_preset] else "https://www.screener.in/company/TATASTEEL/consolidated/"
-
-if "target_url" not in st.session_state or selected_preset != st.session_state.get("prev_preset"):
-    st.session_state["target_url"] = default_target_url
-    st.session_state["prev_preset"] = selected_preset
-
-url_input = st.sidebar.text_input(
-    "Screener Company URL",
-    value=st.session_state["target_url"],
-    help="Direct link to any listed company page on Screener.in"
+search_mode = st.sidebar.radio(
+    "Search Mode",
+    ["Type Company Name", "Quick Presets", "Custom URL"],
+    horizontal=True,
+    label_visibility="collapsed"
 )
-st.session_state["target_url"] = url_input
+
+active_url = "https://www.screener.in/company/TATASTEEL/consolidated/"
+
+if search_mode == "Type Company Name":
+    query_text = st.sidebar.text_input(
+        "Search Company Name",
+        value=st.session_state.get("prev_query", "Tata Steel"),
+        help="Type any company name (e.g. Tata, Reliance, Infosys, Zomato, ITC, Adani)"
+    )
+    st.session_state["prev_query"] = query_text
+    matches = search_screener_companies(query_text)
+    
+    if matches:
+        match_displays = [m['display'] for m in matches]
+        selected_disp = st.sidebar.selectbox("Matching Stocks", options=match_displays, index=0)
+        selected_match = next((m for m in matches if m['display'] == selected_disp), matches[0])
+        active_url = selected_match['url']
+    else:
+        st.sidebar.caption("No live matches found. Check spelling or try ticker symbol.")
+        active_url = "https://www.screener.in/company/TATASTEEL/consolidated/"
+
+elif search_mode == "Quick Presets":
+    presets = {
+        "Tata Steel (Metals)": "https://www.screener.in/company/TATASTEEL/consolidated/",
+        "Hindustan Unilever (FMCG)": "https://www.screener.in/company/HINDUNILVR/",
+        "TCS (IT Services)": "https://www.screener.in/company/TCS/",
+        "Reliance Industries (Energy)": "https://www.screener.in/company/RELIANCE/consolidated/",
+        "Larsen & Toubro (Infrastructure)": "https://www.screener.in/company/LT/consolidated/",
+        "State Bank of India (Banking)": "https://www.screener.in/company/SBIN/"
+    }
+    sel_preset = st.sidebar.selectbox("Select Preset Stock", options=list(presets.keys()), index=0)
+    active_url = presets[sel_preset]
+
+else: # Custom URL
+    active_url = st.sidebar.text_input(
+        "Direct Screener URL",
+        value="https://www.screener.in/company/TATASTEEL/consolidated/",
+        help="Paste any company URL from Screener.in"
+    )
 
 with st.sidebar.expander("Valuation Assumptions", expanded=False):
     rf_rate = st.slider("Risk-Free Rate (Rf)", min_value=5.0, max_value=9.0, value=7.0, step=0.1, format="%.1f%%") / 100.0
@@ -298,16 +441,24 @@ def fetch_and_compute(url: str, rf: float, erp_val: float, beta: float, g_term: 
     return raw, fc_res, val_res
 
 
+@st.cache_data(show_spinner=False, ttl=1800)
+def fetch_news_and_catalysts(c_name: str, ticker_sym: str, base_target: float, wacc: float):
+    news_engine = NewsSentimentEngine()
+    articles = news_engine.fetch_company_news(c_name, ticker_sym, max_items=12)
+    impact = news_engine.evaluate_catalyst_impact(articles, base_target, wacc)
+    return articles, impact
+
+
 # -----------------------------------------------------------------------------
 # MAIN APP BODY
 # -----------------------------------------------------------------------------
-if not url_input.strip():
-    st.info("Enter a Screener.in company URL in the sidebar to begin analysis.")
+if not active_url.strip():
+    st.info("Select or search for a company in the sidebar to begin analysis.")
     st.stop()
 
-with st.spinner("Extracting audited financials and computing valuation..."):
+with st.spinner("Extracting audited financials, cross-referencing market data, and computing valuation..."):
     try:
-        raw_data, fc_results, val_results = fetch_and_compute(url_input, rf_rate, erp, beta_val, term_g)
+        raw_data, fc_results, val_results = fetch_and_compute(active_url, rf_rate, erp, beta_val, term_g)
     except InvalidURLError as e:
         st.error(f"Invalid URL: {e}")
         st.info("Ensure the URL follows the format: `https://www.screener.in/company/<TICKER>/`.")
@@ -348,16 +499,31 @@ fair_target = val_results['fair_value_summary']['blended_target_price']
 fair_upside = val_results['fair_value_summary']['blended_upside_pct']
 wacc_pct = val_results['wacc_parameters']['wacc_pct']
 
-# Top Header
+# Fetch Real-Time News & Catalyst Impact
+articles, catalyst_impact = fetch_news_and_catalysts(company_name, ticker, fair_target, wacc_pct)
+
+# External Financial Hub Links (Beyond Screener)
+tv_link = f"https://in.tradingview.com/symbols/NSE-{ticker}/"
+gf_link = f"https://www.google.com/finance/quote/{ticker}:NSE"
+mc_link = f"https://www.moneycontrol.com/india/stockpricequote/"
+bse_link = f"https://www.bseindia.com/corporates/ann.html"
+
+# Top Header with Multi-Source Hub
 st.markdown(f"""
 <div class="terminal-header">
     <div class="company-title-row">
         <h1 class="company-name">{company_name}</h1>
         <span class="company-ticker">{ticker}</span>
         <span class="company-sector">{sector}</span>
+        <div style="margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap;">
+            <a href="{tv_link}" target="_blank" class="external-hub-link">📈 TradingView Chart ↗</a>
+            <a href="{gf_link}" target="_blank" class="external-hub-link">📊 Google Finance ↗</a>
+            <a href="{mc_link}" target="_blank" class="external-hub-link">💼 Moneycontrol ↗</a>
+            <a href="{bse_link}" target="_blank" class="external-hub-link">🏛️ BSE Announcements ↗</a>
+        </div>
     </div>
     <div class="company-meta">
-        Source: {prov.get('source_url', url_input)} &bull; Reporting Scope: {prov.get('reporting_type', 'Audited')} &bull; Extracted: {prov.get('extracted_at_utc', 'Real-time')}
+        Primary Source: {prov.get('source_url', active_url)} &bull; Reporting: {prov.get('reporting_type', 'Audited')} &bull; Extracted: {prov.get('extracted_at_utc', 'Real-time')}
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -381,20 +547,21 @@ with kpi_cols[6]:
     st.metric("ROE", f"{kpis.get('ROE', 'N/A')}%")
 
 # Discreet Data Quality & Scope Expander
-with st.expander("Data Quality, Audit & Source Details", expanded=False):
+with st.expander("Data Quality, Audit & Multi-Source Provenance", expanded=False):
     q_c1, q_c2, q_c3 = st.columns(3)
-    q_c1.markdown(f"**Reporting Scope**: {prov.get('reporting_type', 'Audited')}")
-    q_c1.markdown(f"**Source URL**: [{prov.get('source_url', url_input)}]({prov.get('source_url', url_input)})")
-    q_c2.markdown(f"**Cash Flow Statements**: {'Available' if prov.get('has_cash_flow') else 'Not Found'}")
-    q_c2.markdown(f"**Financial Ratios**: {'Available' if prov.get('has_ratios') else 'Not Found'}")
+    q_c1.markdown(f"**Primary Statements**: [Screener.in Filings]({prov.get('source_url', active_url)})")
+    q_c1.markdown(f"**Reporting Scope**: {prov.get('reporting_type', 'Audited Consolidated')}")
+    q_c2.markdown(f"**Market News Feeds**: Google News RSS Real-time")
+    q_c2.markdown(f"**Live Charting Feed**: TradingView NSE Stream")
     q_c3.markdown(f"**Audited Fiscal Years**: {len(prov.get('historical_years_available', []))} periods")
     q_c3.markdown(f"**Extraction Timestamp**: {prov.get('extracted_at_utc', 'Real-time')}")
 
 # -----------------------------------------------------------------------------
-# NAVIGATION TABS (Strictly 6 Major Areas)
+# NAVIGATION TABS (Strictly Structured)
 # -----------------------------------------------------------------------------
-tab_overview, tab_forecast, tab_valuation, tab_sensitivity, tab_statements, tab_excel = st.tabs([
+tab_overview, tab_news, tab_forecast, tab_valuation, tab_sensitivity, tab_statements, tab_excel = st.tabs([
     "Overview",
+    "News & Catalysts",
     "Forecast",
     "Valuation",
     "Sensitivity",
@@ -493,7 +660,102 @@ with tab_overview:
 
 
 # =============================================================================
-# TAB 2: FORECAST
+# TAB 2: NEWS & MARKET CATALYSTS (NEW CAPABILITY)
+# =============================================================================
+with tab_news:
+    st.markdown("##### Real-Time News Catalysts & Market Impact Model")
+    st.write("Extracts live financial headlines across major financial portals, evaluates sentiment scores, and quantifies the predicted valuation impact on revenue growth, cost of capital, and target price.")
+
+    # Catalyst Scorecard Strip
+    cat_score = catalyst_impact['catalyst_score']
+    bias_desc = catalyst_impact['sentiment_bias']
+    adj_target = catalyst_impact['sentiment_adjusted_target']
+    price_impact = catalyst_impact['price_impact_pct']
+    rev_impact = catalyst_impact['revenue_growth_impact_pct']
+    wacc_adj = catalyst_impact['wacc_impact_bps']
+
+    col_cat1, col_cat2, col_cat3, col_cat4 = st.columns(4)
+    with col_cat1:
+        st.metric("Catalyst Sentiment Score", f"{cat_score:+.1f}%", delta=catalyst_impact['bias_tag'])
+    with col_cat2:
+        st.metric("Base DCF Fair Value", f"₹{fair_target:,.1f}")
+    with col_cat3:
+        st.metric("Sentiment-Adjusted Fair Value", f"₹{adj_target:,.1f}", delta=f"{price_impact:+.1f}%")
+    with col_cat4:
+        st.metric("Predicted Bias", bias_desc.split()[0], delta=f"Growth {rev_impact:+.1f}% | WACC {wacc_adj:+.0f}bps")
+
+    # Predictive Impact Visual Comparison
+    fig_cat_comp = go.Figure()
+    cat_methods = ["Current Market Price (CMP)", "Base DCF Fair Value", "Sentiment-Adjusted Fair Value"]
+    cat_vals = [cmp, fair_target, adj_target]
+    cat_colors = ["#f43f5e", "#38bdf8", "#34d399" if adj_target >= fair_target else "#fbbf24"]
+
+    fig_cat_comp.add_trace(go.Bar(
+        y=cat_methods,
+        x=cat_vals,
+        orientation="h",
+        marker=dict(color=cat_colors, line=dict(color="#1e222d", width=1.5)),
+        text=[f"₹{v:,.1f}" for v in cat_vals],
+        textposition="inside",
+        insidetextanchor="middle",
+        textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
+        hovertemplate="<b>%{y}</b>: ₹%{x:,.1f}<extra></extra>"
+    ))
+    apply_market_theme(
+        fig_cat_comp,
+        title="Market Price vs. Unadjusted DCF vs. Real-Time News Catalyst Adjusted Fair Value",
+        height=240,
+        show_legend=False,
+        xaxis_title="Price Per Share (₹)"
+    )
+    st.plotly_chart(fig_cat_comp, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+
+    # Key Catalyst Summary Bullets
+    st.markdown("###### Catalyst Model Key Takeaways")
+    for b in catalyst_impact.get('summary_bullets', []):
+        st.markdown(f"- {b}")
+
+    st.markdown("---")
+    st.markdown("##### Curated Real-Time Financial News Stream")
+
+    if not articles:
+        st.info("No recent financial news articles were retrieved for this ticker. Check back during active market hours.")
+    else:
+        # Filter buttons
+        filter_col, _ = st.columns([2, 4])
+        with filter_col:
+            news_filter = st.selectbox("Filter News by Sentiment", ["All Articles", "Positive / Tailwinds", "Negative / Headwinds", "Neutral"], index=0)
+
+        for art in articles:
+            if news_filter == "Positive / Tailwinds" and art['sentiment_label'] != "Positive":
+                continue
+            if news_filter == "Negative / Headwinds" and art['sentiment_label'] != "Negative":
+                continue
+            if news_filter == "Neutral" and art['sentiment_label'] != "Neutral":
+                continue
+
+            badge_html = (
+                '<span class="badge-pos">● Positive Tailwinds</span>' if art['sentiment_label'] == 'Positive'
+                else ('<span class="badge-neg">● Negative Headwinds</span>' if art['sentiment_label'] == 'Negative'
+                else '<span class="badge-neu">● Neutral</span>')
+            )
+            cat_html = f'<span class="badge-cat">{art["catalyst"]}</span>'
+
+            st.markdown(f"""
+            <div class="news-card">
+                <div class="news-title">{art['title']}</div>
+                <div class="news-meta">
+                    Source: <strong>{art['source']}</strong> &bull; {art['pub_date']} &bull; {badge_html} {cat_html}
+                </div>
+                <div>
+                    <a href="{art['link']}" target="_blank" class="news-link">Read Full Coverage on {art['source']} ↗</a>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# TAB 3: FORECAST
 # =============================================================================
 with tab_forecast:
     hist_years = fc_results['historical_years']
@@ -632,7 +894,7 @@ with tab_forecast:
 
 
 # =============================================================================
-# TAB 3: VALUATION
+# TAB 4: VALUATION
 # =============================================================================
 with tab_valuation:
     # High Terminal Value Warning Banner
@@ -710,7 +972,7 @@ with tab_valuation:
 
 
 # =============================================================================
-# TAB 4: SENSITIVITY
+# TAB 5: SENSITIVITY
 # =============================================================================
 with tab_sensitivity:
     st.markdown("##### Two-Way Sensitivity Analysis")
@@ -773,7 +1035,7 @@ with tab_sensitivity:
 
 
 # =============================================================================
-# TAB 5: STATEMENTS
+# TAB 6: STATEMENTS
 # =============================================================================
 with tab_statements:
     st.markdown("##### Statement Metric Explorer")
@@ -895,7 +1157,7 @@ with tab_statements:
 
 
 # =============================================================================
-# TAB 6: EXCEL EXPORT
+# TAB 7: EXCEL EXPORT
 # =============================================================================
 with tab_excel:
     st.markdown("##### Institutional 8-Worksheet Excel Model")
