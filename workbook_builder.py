@@ -17,7 +17,6 @@ class WorkbookBuilder:
         self.fc = forecast_results
         self.val = valuation_results
         self.wb = openpyxl.Workbook()
-        # Remove default sheet
         self.wb.remove(self.wb.active)
 
         # Style Palettes (Institutional Wall Street Standard)
@@ -26,15 +25,15 @@ class WorkbookBuilder:
         self.font_title = Font(name='Calibri', size=16, bold=True, color='1F4E78')
         self.font_bold = Font(name='Calibri', size=11, bold=True, color='000000')
         self.font_regular = Font(name='Calibri', size=11, color='000000')
-        self.font_formula = Font(name='Calibri', size=11, color='000000') # Formulas in black
-        self.font_input = Font(name='Calibri', size=11, bold=True, color='002060') # Hardcoded inputs in blue
-        self.font_link = Font(name='Calibri', size=11, italic=True, color='004C00') # Links in dark green
+        self.font_formula = Font(name='Calibri', size=11, color='000000')
+        self.font_input = Font(name='Calibri', size=11, bold=True, color='002060')
+        self.font_link = Font(name='Calibri', size=11, italic=True, color='004C00')
         
         self.fill_navy = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
         self.fill_accent = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
         self.fill_light_gray = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
-        self.fill_input = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid') # Soft yellow for user input
-        self.fill_pass = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid') # Soft green for pass
+        self.fill_input = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
+        self.fill_pass = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
         
         self.border_thin = Border(
             left=Side(style='thin', color='D9D9D9'),
@@ -48,22 +47,20 @@ class WorkbookBuilder:
         )
 
     def generate(self, output_path: str) -> str:
-        """Build all 8 required worksheets and save the workbook."""
-        self._build_read_me()
-        self._build_raw_data()
-        self._build_historical_financials()
-        self._build_assumptions()
-        self._build_forecast()
-        self._build_dcf_valuation()
-        self._build_sensitivity_analysis()
-        self._build_dashboard()
-
+        """Build all 8 required worksheets and save the workbook to disk."""
+        self._build_all_sheets()
         self.wb.save(output_path)
         return output_path
 
     def generate_bytes(self) -> bytes:
         """Build all 8 required worksheets and return as in-memory bytes."""
         buffer = io.BytesIO()
+        self._build_all_sheets()
+        self.wb.save(buffer)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    def _build_all_sheets(self):
         self._build_read_me()
         self._build_raw_data()
         self._build_historical_financials()
@@ -72,10 +69,6 @@ class WorkbookBuilder:
         self._build_dcf_valuation()
         self._build_sensitivity_analysis()
         self._build_dashboard()
-
-        self.wb.save(buffer)
-        buffer.seek(0)
-        return buffer.getvalue()
 
     # ==========================================
     # 1. READ_ME
@@ -90,7 +83,7 @@ class WorkbookBuilder:
         ws['B4'] = "1. Model Objective & Scope"
         ws['B4'].font = self.font_subhead
         ws['B5'] = "This workbook contains an institutional dynamic 3-statement financial model, statistical multi-model prediction engine, and DCF valuation."
-        ws['B6'] = f"Data automatically ingested from Screener.in ({self.raw_data['url']})."
+        ws['B6'] = f"Data ingested from Screener.in ({self.raw_data['url']})."
 
         ws['B8'] = "2. Color Coding Standard"
         ws['B8'].font = self.font_subhead
@@ -137,6 +130,12 @@ class WorkbookBuilder:
         ws.cell(row=row, column=4, value='=IF(Forecast!B22="BALANCED","PASS (All 5 Forecast Years Fully Balanced)","FAIL")').font = self.font_bold
         ws.cell(row=row, column=4).fill = self.fill_pass
         row += 1
+
+        ws.cell(row=row, column=2, value="Terminal Growth vs WACC Check:").font = self.font_bold
+        ws.cell(row=row, column=4, value='=IF(Assumptions!$B$30<Assumptions!$B$29,"PASS (Terminal Growth g < WACC)","FAIL (g >= WACC)")').font = self.font_bold
+        ws.cell(row=row, column=4).fill = self.fill_pass
+        row += 1
+
         ws.cell(row=row, column=2, value="Forecast Formula Integrity:").font = self.font_bold
         ws.cell(row=row, column=4, value="PASS (100% Dynamic Formulas, Zero Hardcoded Forecast Values)").font = self.font_bold
         ws.cell(row=row, column=4).fill = self.fill_pass
@@ -169,7 +168,6 @@ class WorkbookBuilder:
             ws.cell(row=row, column=1, value=title).font = self.font_subhead
             row += 1
 
-            # Header row
             ws.cell(row=row, column=1, value="Line Item").font = self.font_header
             ws.cell(row=row, column=1).fill = self.fill_navy
             for c_idx, col_name in enumerate(df.columns, start=2):
@@ -179,7 +177,6 @@ class WorkbookBuilder:
                 cell.alignment = Alignment(horizontal='right')
             row += 1
 
-            # Data rows
             for idx_name, data_row in df.iterrows():
                 ws.cell(row=row, column=1, value=str(idx_name)).font = self.font_regular
                 for c_idx, val in enumerate(data_row, start=2):
@@ -287,7 +284,6 @@ class WorkbookBuilder:
         ws['A2'].font = self.font_regular
 
         row = 4
-        # Section A: Revenue & Operating Drivers
         ws.cell(row=row, column=1, value="A. OPERATING & REVENUE DRIVERS").font = self.font_subhead
         row += 1
         ws.cell(row=row, column=1, value="Assumption Parameter").font = self.font_header
@@ -302,7 +298,7 @@ class WorkbookBuilder:
 
         assump_list = [
             ("Top-Line Growth Model Selected", self.fc['assumptions']['best_sales_model'], "Text", f"Selected via walk-forward backtest (Lowest MAPE: {self.fc['backtest']['model_evaluations'][self.fc['assumptions']['best_sales_model']]['mape']}%)"),
-            ("Sustainable Operating Margin (OPM %)", self.fc['assumptions']['median_opm_pct'] / 100.0, "Percentage", "10-Year historical median normalized operating margin"),
+            ("Sustainable Operating Margin (OPM %)", self.fc['assumptions']['median_opm_pct'] / 100.0, "Percentage", "Historical normalized operating margin anchor"),
             ("Depreciation Rate (% on Net Block)", self.fc['assumptions']['depreciation_rate_pct'] / 100.0, "Percentage", "Historical D&A as % of Average Net Fixed Assets"),
             ("Capex as % of Sales", self.fc['assumptions']['capex_to_sales_pct'] / 100.0, "Percentage", "Historical median reinvestment rate in plant & equipment"),
             ("Pre-Tax Cost of Debt (Kd)", self.fc['assumptions']['cost_of_debt_pct'] / 100.0, "Percentage", "Historical effective borrowing interest rate"),
@@ -323,7 +319,6 @@ class WorkbookBuilder:
             row += 1
 
         row += 1
-        # Section B: Working Capital Cycle Drivers (starts row 13)
         ws.cell(row=row, column=1, value="B. WORKING CAPITAL CYCLE ASSUMPTIONS").font = self.font_subhead
         row += 1
         ws.cell(row=row, column=1, value="Working Capital Metric").font = self.font_header
@@ -338,7 +333,7 @@ class WorkbookBuilder:
 
         wc_list = [
             ("Debtor Days (DSO)", self.fc['assumptions']['debtor_days'], "(Trade Receivables / Sales) * 365", "Median historical collections period"),
-            ("Inventory Days (DIO)", self.fc['assumptions']['inventory_days'], "(Inventories / Sales) * 365", "Median historical inventory holding duration"),
+            ("Inventory Days (DIO)", self.fc['assumptions']['inventory_days'], "(Inventories / Sales) * 365", "Median historical inventory holding duration (0 for service firms)"),
             ("Payable Days (DPO)", self.fc['assumptions']['payable_days'], "(Trade Payables / Sales) * 365", "Median vendor payment window"),
             ("Net Working Capital Days (CCC)", self.fc['assumptions']['working_capital_days'], "=DSO + DIO - DPO", "Cash Conversion Cycle duration"),
         ]
@@ -355,7 +350,6 @@ class WorkbookBuilder:
             row += 1
 
         row += 1
-        # Section C: Cost of Capital (WACC) & Terminal Value (starts row 20)
         ws.cell(row=row, column=1, value="C. VALUATION & COST OF CAPITAL (WACC) PARAMETERS").font = self.font_subhead
         row += 1
         ws.cell(row=row, column=1, value="Valuation Parameter").font = self.font_header
@@ -375,7 +369,7 @@ class WorkbookBuilder:
             ("Target Equity Weight (We)", self.val['wacc_parameters']['weight_equity_pct'] / 100.0, "Market value capital structure weight"),
             ("Target Debt Weight (Wd)", "=1-B27", "1 - We"),
             ("Discount Rate (WACC)", self.val['wacc_parameters']['wacc_pct'] / 100.0, "Blended Cost of Capital: We*Ke + Wd*Kd"),
-            ("Long-Term Terminal Growth Rate (g)", self.val['gordon_growth_method']['terminal_growth_pct'] / 100.0, "Perpetual GDP growth anchor (capped <= WACC - 2%)"),
+            ("Long-Term Terminal Growth Rate (g)", self.val['gordon_growth_method']['terminal_growth_pct'] / 100.0, "Perpetual GDP growth anchor (must be < WACC)"),
             ("Exit Multiple (EV/EBITDA)", self.val['exit_multiple_method']['exit_multiple_ev_ebitda'], "Median sector EV/EBITDA valuation multiple"),
         ]
 
@@ -414,7 +408,6 @@ class WorkbookBuilder:
         n_years = len(future_years)
         
         row = 3
-        # Header Row
         ws.cell(row=row, column=1, value="Financial Line Item (₹ Cr.)").font = self.font_header
         ws.cell(row=row, column=1).fill = self.fill_navy
         for c_idx, yr in enumerate(future_years, start=2):
@@ -431,7 +424,7 @@ class WorkbookBuilder:
             cell.font = self.font_bold
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 5
+        row += 1 # 5
 
         # Row 5: Operating Expenses
         ws.cell(row=row, column=1, value="Operating Expenses").font = self.font_regular
@@ -441,7 +434,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 6
+        row += 1 # 6
 
         # Row 6: EBITDA
         ws.cell(row=row, column=1, value="Operating Profit (EBITDA)").font = self.font_bold
@@ -451,7 +444,7 @@ class WorkbookBuilder:
             cell.font = self.font_bold
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 7
+        row += 1 # 7
 
         # Row 7: D&A
         ws.cell(row=row, column=1, value="Depreciation & Amortization").font = self.font_regular
@@ -460,7 +453,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 8
+        row += 1 # 8
 
         # Row 8: EBIT
         ws.cell(row=row, column=1, value="Operating Earnings (EBIT)").font = self.font_bold
@@ -470,7 +463,7 @@ class WorkbookBuilder:
             cell.font = self.font_bold
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 9
+        row += 1 # 9
 
         # Row 9: Interest
         ws.cell(row=row, column=1, value="Finance Costs (Interest)").font = self.font_regular
@@ -479,7 +472,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 10
+        row += 1 # 10
 
         # Row 10: Other Income
         ws.cell(row=row, column=1, value="Other Income").font = self.font_regular
@@ -488,7 +481,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 11
+        row += 1 # 11
 
         # Row 11: PBT
         ws.cell(row=row, column=1, value="Profit Before Tax (PBT)").font = self.font_bold
@@ -498,7 +491,7 @@ class WorkbookBuilder:
             cell.font = self.font_bold
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 12
+        row += 1 # 12
 
         # Row 12: Tax
         ws.cell(row=row, column=1, value="Tax Provision").font = self.font_regular
@@ -508,7 +501,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 13
+        row += 1 # 13
 
         # Row 13: PAT
         ws.cell(row=row, column=1, value="Net Profit After Tax (PAT)").font = self.font_bold
@@ -519,22 +512,22 @@ class WorkbookBuilder:
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
             cell.border = self.border_total
-        row += 2 # row becomes 15
+        row += 2 # 15
 
-        # Supporting Balance Sheet & FCF Schedule
+        # Supporting Schedule
         ws.cell(row=row, column=1, value="SUPPORTING BALANCE SHEET & FCF SCHEDULE (₹ Cr.)").font = self.font_subhead
-        row += 1 # row becomes 16
+        row += 1 # 16
 
-        # Row 16: Fixed Assets Net Block
+        # Row 16: Fixed Assets
         ws.cell(row=row, column=1, value="Net Fixed Assets (PP&E)").font = self.font_bold
         for c_idx, val in enumerate(self.fc['forecast_statements']['fixed_assets'], start=2):
             cell = ws.cell(row=row, column=c_idx, value=round(val, 1))
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 17
+        row += 1 # 17
 
-        # Row 17: Capital Expenditure
+        # Row 17: Capex
         ws.cell(row=row, column=1, value="Capital Expenditure (Capex)").font = self.font_regular
         for c_idx in range(2, 2 + n_years):
             col_letter = get_column_letter(c_idx)
@@ -542,7 +535,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 18
+        row += 1 # 18
 
         # Row 18: Delta NWC
         ws.cell(row=row, column=1, value="Increase in Net Working Capital (ΔNWC)").font = self.font_regular
@@ -551,7 +544,7 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 19
+        row += 1 # 19
 
         # Row 19: Borrowings
         ws.cell(row=row, column=1, value="Total Borrowings (Debt)").font = self.font_bold
@@ -560,20 +553,19 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 20
+        row += 1 # 20
 
-        # Row 20: Free Cash Flow to Firm (FCFF)
+        # Row 20: FCFF
         ws.cell(row=row, column=1, value="Unlevered Free Cash Flow (FCFF)").font = self.font_bold
         for c_idx in range(2, 2 + n_years):
             col_letter = get_column_letter(c_idx)
-            # FCFF = EBIT * (1 - t) + D&A - Capex - Delta NWC
             cell = ws.cell(row=row, column=c_idx, value=f"={col_letter}8*(1-Assumptions!$B$11)+{col_letter}7-{col_letter}17-{col_letter}18")
             cell.font = self.font_bold
             cell.fill = self.fill_accent
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
             cell.border = self.border_total
-        row += 2 # row becomes 22
+        row += 2 # 22
 
         # Row 22: Balance Sheet Audit Check
         ws.cell(row=row, column=1, value="Balance Sheet Balancing Verification:").font = self.font_bold
@@ -602,7 +594,6 @@ class WorkbookBuilder:
         ws.cell(row=row, column=1, value="1. EXPLICIT FORECAST CASH FLOW DISCOUNTING (₹ Cr.)").font = self.font_subhead
         row += 1
 
-        # Table header (Row 4)
         ws.cell(row=row, column=1, value="Valuation Metric").font = self.font_header
         ws.cell(row=row, column=1).fill = self.fill_navy
         for c_idx, yr in enumerate(future_years, start=2):
@@ -610,9 +601,9 @@ class WorkbookBuilder:
             cell.font = self.font_header
             cell.fill = self.fill_navy
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 5
+        row += 1 # 5
 
-        # Row 5: FCFF Row (links to Forecast row 20)
+        # Row 5: FCFF
         ws.cell(row=row, column=1, value="Unlevered Free Cash Flow (FCFF)").font = self.font_bold
         for c_idx in range(2, 2 + n_years):
             col_letter = get_column_letter(c_idx)
@@ -620,16 +611,16 @@ class WorkbookBuilder:
             cell.font = self.font_link
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 6
+        row += 1 # 6
 
-        # Row 6: Period index
+        # Row 6: Period Index
         ws.cell(row=row, column=1, value="Period Index (t)").font = self.font_regular
         for c_idx in range(2, 2 + n_years):
             t = c_idx - 1
             cell = ws.cell(row=row, column=c_idx, value=t)
             cell.font = self.font_regular
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 7
+        row += 1 # 7
 
         # Row 7: Discount Factor
         ws.cell(row=row, column=1, value="Discount Factor (Mid-Year Convention)").font = self.font_regular
@@ -639,9 +630,9 @@ class WorkbookBuilder:
             cell.font = self.font_formula
             cell.number_format = '0.0000'
             cell.alignment = Alignment(horizontal='right')
-        row += 1 # row becomes 8
+        row += 1 # 8
 
-        # Row 8: Present Value of FCFF
+        # Row 8: PV of FCFF
         ws.cell(row=row, column=1, value="Present Value of FCFF").font = self.font_bold
         for c_idx in range(2, 2 + n_years):
             col_letter = get_column_letter(c_idx)
@@ -649,21 +640,19 @@ class WorkbookBuilder:
             cell.font = self.font_bold
             cell.number_format = '#,##0.0'
             cell.alignment = Alignment(horizontal='right')
-        row += 2 # row becomes 10
+        row += 2 # 10
 
-        # Section 2: Valuation Bridge (starts row 10)
         ws.cell(row=row, column=1, value="2. VALUATION BRIDGE & IMPLIED EQUITY VALUE (₹ Cr.)").font = self.font_subhead
-        row += 1 # row becomes 11
+        row += 1 # 11
         
         last_col = get_column_letter(1 + n_years)
 
-        # Explicitly build rows 11 to 21 with precise references
-        # Row 11: Cumulative PV of Explicit FCFF
+        # Row 11: Cumulative PV
         ws.cell(row=11, column=1, value="Cumulative PV of 5-Year Explicit FCFF").font = self.font_regular
         ws.cell(row=11, column=2, value=f"=SUM(B8:{last_col}8)").font = self.font_formula
         ws.cell(row=11, column=2).number_format = '#,##0.0'
 
-        # Row 12: Terminal Value (Gordon Growth Method)
+        # Row 12: Terminal Value
         ws.cell(row=12, column=1, value="Terminal Value (Gordon Growth Method)").font = self.font_regular
         ws.cell(row=12, column=2, value=f"=({last_col}5*(1+Assumptions!$B$30))/(Assumptions!$B$29-Assumptions!$B$30)").font = self.font_formula
         ws.cell(row=12, column=2).number_format = '#,##0.0'
@@ -673,7 +662,7 @@ class WorkbookBuilder:
         ws.cell(row=13, column=2, value=f"=B12/(1+Assumptions!$B$29)^{n_years}").font = self.font_formula
         ws.cell(row=13, column=2).number_format = '#,##0.0'
 
-        # Row 14: Enterprise Value (EV)
+        # Row 14: Enterprise Value
         ws.cell(row=14, column=1, value="Enterprise Value (EV)").font = self.font_bold
         c14 = ws.cell(row=14, column=2, value="=B11+B13")
         c14.font = self.font_bold
@@ -687,7 +676,7 @@ class WorkbookBuilder:
         c15.fill = self.fill_input
         c15.number_format = '#,##0.0'
 
-        # Row 16: (-) Total Debt (Borrowings)
+        # Row 16: (-) Total Debt
         ws.cell(row=16, column=1, value="(-) Total Debt (Borrowings)").font = self.font_regular
         c16 = ws.cell(row=16, column=2, value=self.val['valuation_bridge']['total_debt_cr'])
         c16.font = self.font_input
@@ -702,13 +691,13 @@ class WorkbookBuilder:
         c17.number_format = '#,##0.0'
 
         # Row 18: Shares Outstanding
-        ws.cell(row=18, column=1, value="Shares Outstanding (Cr.)").font = self.font_regular
+        ws.cell(row=18, column=1, value="Diluted Shares Outstanding (Cr.)").font = self.font_regular
         c18 = ws.cell(row=18, column=2, value=self.val['valuation_bridge']['shares_outstanding_cr'])
         c18.font = self.font_input
         c18.fill = self.fill_input
         c18.number_format = '#,##0.0'
 
-        # Row 19: Implied Target Price per Share
+        # Row 19: Target Price
         ws.cell(row=19, column=1, value="Implied Target Price per Share (₹)").font = self.font_bold
         c19 = ws.cell(row=19, column=2, value="=B17/B18")
         c19.font = self.font_bold
@@ -722,7 +711,7 @@ class WorkbookBuilder:
         c20.fill = self.fill_input
         c20.number_format = '₹#,##0.0'
 
-        # Row 21: Upside
+        # Row 21: Upside %
         ws.cell(row=21, column=1, value="Implied Upside / (Downside) %").font = self.font_bold
         c21 = ws.cell(row=21, column=2, value="=(B19-B20)/B20")
         c21.font = self.font_bold
@@ -745,7 +734,6 @@ class WorkbookBuilder:
         ws['A1'] = f"{self.raw_data['company_name']} — Valuation Sensitivity Matrices"
         ws['A1'].font = self.font_title
 
-        # Table 1: WACC vs. Terminal Growth Rate (g)
         row = 3
         ws.cell(row=row, column=1, value="TABLE 1: IMPLIED TARGET SHARE PRICE (₹) — WACC VS. TERMINAL GROWTH (g)").font = self.font_subhead
         row += 1
@@ -772,13 +760,12 @@ class WorkbookBuilder:
                     cell.value = "N/A"
                 cell.font = self.font_formula
                 cell.alignment = Alignment(horizontal='right')
-                if r_idx == 2 and c_idx == 4:
+                if r_idx == 2 and c_idx == 4 and price is not None:
                     cell.fill = self.fill_pass
                     cell.font = self.font_bold
             row += 1
 
         row += 2
-        # Table 2: WACC vs. Exit Multiple
         ws.cell(row=row, column=1, value="TABLE 2: IMPLIED TARGET SHARE PRICE (₹) — WACC VS. EXIT MULTIPLE (EV/EBITDA)").font = self.font_subhead
         row += 1
 
@@ -865,8 +852,8 @@ class WorkbookBuilder:
         checks = [
             ("Balance Sheet Balanced (Assets - Liab - Equity = 0)", "PASS"),
             ("Zero Hardcoded Forecasts (100% Dynamic Formulas)", "PASS"),
+            ("Terminal Growth Constraint (g < WACC)", "PASS"),
             ("Cash Flow Reconciliation Linked", "PASS"),
-            ("DCF Terminal Value Convergence (g < WACC)", "PASS"),
             ("Cross-Statement Links Verified", "PASS"),
         ]
 

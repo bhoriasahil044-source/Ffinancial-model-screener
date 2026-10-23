@@ -1,28 +1,54 @@
 """
 Screener.in Financial Data Scraper
 Extracts audited historical financials, balance sheets, cash flows, ratios, and profile metadata
-for any company URL from Screener.in.
+for any company URL from Screener.in with strict validation and robust error handling.
 """
 
 import re
 import urllib.parse
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional, Tuple
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
 
 
-def clean_number(text: str) -> Optional[float]:
+class ScreenerScraperError(Exception):
+    """Base exception for Screener scraping operations."""
+    pass
+
+
+class InvalidURLError(ScreenerScraperError):
+    """Raised when the provided URL does not match valid Screener.in company structure."""
+    pass
+
+
+class CompanyNotFoundError(ScreenerScraperError):
+    """Raised when Screener returns a 404 or the company does not exist."""
+    pass
+
+
+class ScreenerAccessError(ScreenerScraperError):
+    """Raised when request is blocked, rate-limited, or times out."""
+    pass
+
+
+class InsufficientDataError(ScreenerScraperError):
+    """Raised when extracted financial statements lack the minimum required history."""
+    pass
+
+
+def clean_number(text: Any) -> Optional[float]:
     """Clean and convert string representations of numbers to float."""
     if text is None:
         return None
     s = str(text).replace('\xa0', ' ').strip()
-    if not s or s == '-' or s == '—' or s == '':
+    if not s or s in ['-', '—', 'N/A', 'nan', 'NaN', '']:
         return None
     
     # Remove percentage, currency symbols, and commas
-    s = s.replace('%', '').replace(',', '').replace('₹', '').replace('Cr.', '').strip()
+    s = s.replace('%', '').replace(',', '').replace('₹', '').replace('Rs.', '').replace('Cr.', '').strip()
     
     # Check for parentheses indicating negative numbers: (123) -> -123
     neg_match = re.match(r'^\((.*)\)$', s)
@@ -30,8 +56,9 @@ def clean_number(text: str) -> Optional[float]:
         s = '-' + neg_match.group(1).strip()
         
     try:
-        return float(s)
-    except ValueError:
+        val = float(s)
+        return val if np.isfinite(val) else None
+    except (ValueError, TypeError):
         return None
 
 
@@ -45,33 +72,86 @@ def clean_row_label(label: str) -> str:
 
 
 class ScreenerScraper:
-    def __init__(self, headers: Optional[Dict[str, str]] = None):
+    VALID_DOMAINS = ['www.screener.in', 'screener.in']
+
+    def __init__(self, headers: Optional[Dict[str, str]] = None, timeout: int = 15):
         self.headers = headers or {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
         }
+        self.timeout = timeout
+
+    @classmethod
+    def validate_url(cls, url: str) -> Tuple[str, str]:
+        """
+        Validate URL format and extract company ticker.
+        Returns normalized URL and ticker.
+        Raises InvalidURLError if format is invalid.
+        """
+        if not url or not isinstance(url, str):
+            raise InvalidURLError("URL must be a non-empty string.")
+
+        s = url.strip()
+        if not s.startswith(('http://', 'https://')):
+            s = 'https://' + s.lstrip('/')
+
+        try:
+            parsed = urllib.parse.urlparse(s)
+        except Exception as e:
+            raise InvalidURLError(f"Malformed URL: {e}")
+
+        if parsed.netloc.lower() not in cls.VALID_DOMAINS:
+            raise InvalidURLError(
+                f"Domain '{parsed.netloc}' is not supported. URL must be from screener.in "
+                f"(e.g., https://www.screener.in/company/TATASTEEL/consolidated/)."
+            )
+
+        # Path must be /company/<TICKER>/ or /company/<TICKER>/consolidated/
+        path_parts = [p for p in parsed.path.split('/') if p]
+        if len(path_parts) < 2 or path_parts[0].lower() != 'company':
+            raise InvalidURLError(
+                f"Invalid Screener path '{parsed.path}'. "
+                f"Expected format: https://www.screener.in/company/<TICKER>/ or .../consolidated/"
+            )
+
+        ticker = path_parts[1].upper()
+        if not re.match(r'^[A-Z0-9_\-\.&]+$', ticker):
+            raise InvalidURLError(f"Invalid ticker symbol '{ticker}' in URL.")
+
+        # Reconstruct clean normalized HTTPS URL
+        subpath = '/'.join(path_parts)
+        normalized_url = f"https://www.screener.in/{subpath}/"
+
+        return normalized_url, ticker
 
     def fetch_company_data(self, url: str) -> Dict[str, Any]:
         """Fetch and parse all financial statements and ratios from a Screener.in company URL."""
-        # Ensure proper URL formatting
-        parsed = urllib.parse.urlparse(url)
-        if not parsed.scheme:
-            url = 'https://' + url.lstrip('/')
-        
-        response = requests.get(url, headers=self.headers, timeout=15)
-        response.raise_for_status()
-        
+        normalized_url, ticker = self.validate_url(url)
+        is_consolidated = 'consolidated' in normalized_url.lower()
+
+        try:
+            response = requests.get(normalized_url, headers=self.headers, timeout=self.timeout)
+        except requests.exceptions.Timeout:
+            raise ScreenerAccessError(f"Request timed out connecting to Screener.in for {ticker}. Please try again.")
+        except requests.exceptions.ConnectionError:
+            raise ScreenerAccessError("Network connection error. Check your internet connection.")
+        except Exception as e:
+            raise ScreenerAccessError(f"Failed to fetch data from Screener.in: {e}")
+
+        if response.status_code == 404:
+            raise CompanyNotFoundError(f"Company '{ticker}' not found on Screener.in (HTTP 404).")
+        elif response.status_code in [403, 429]:
+            raise ScreenerAccessError(f"Screener.in temporarily rate-limited or blocked the request (HTTP {response.status_code}).")
+        elif response.status_code != 200:
+            raise ScreenerAccessError(f"Screener.in returned unexpected HTTP status {response.status_code}.")
+
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 1. Company Name & Symbol
+
+        # 1. Company Name & Profile
         name_elem = soup.find('h1')
-        company_name = name_elem.text.strip() if name_elem else "Unknown Company"
-        
-        # Extract ticker from URL
-        path_parts = [p for p in parsed.path.split('/') if p]
-        ticker = path_parts[1].upper() if len(path_parts) > 1 and path_parts[0] == 'company' else "COMPANY"
-        
+        company_name = name_elem.text.strip() if name_elem else ticker
+
         # 2. Company Top Ratios & KPIs
         top_kpis: Dict[str, Any] = {}
         for li in soup.select('ul#top-ratios li'):
@@ -81,7 +161,6 @@ class ScreenerScraper:
                 kpi_name = clean_row_label(name_span.text)
                 top_kpis[kpi_name] = clean_number(val_span.text)
 
-        # Also get high/low if present
         for li in soup.select('ul#top-ratios li'):
             name_span = li.find('span', class_='name')
             if name_span and 'High / Low' in name_span.text:
@@ -90,7 +169,7 @@ class ScreenerScraper:
                     top_kpis['High'] = clean_number(num_spans[0].text)
                     top_kpis['Low'] = clean_number(num_spans[1].text)
 
-        # 3. Extract Financial Tables
+        # 3. Extract Financial Statement Tables
         pl_df = self._parse_table_section(soup, 'profit-loss')
         bs_df = self._parse_table_section(soup, 'balance-sheet')
         cf_df = self._parse_table_section(soup, 'cash-flow')
@@ -98,12 +177,29 @@ class ScreenerScraper:
         quarters_df = self._parse_table_section(soup, 'quarters')
         shareholding_df = self._parse_table_section(soup, 'shareholding')
 
-        # 4. About / Description
+        # Validate that essential tables exist
+        if pl_df.empty:
+            raise InsufficientDataError(f"No Profit & Loss statement found on Screener.in for {company_name}.")
+        if bs_df.empty:
+            raise InsufficientDataError(f"No Balance Sheet found on Screener.in for {company_name}.")
+
+        # 4. About / Business Description
         about_div = soup.find('div', class_='about')
         about_text = about_div.text.strip() if about_div else ""
 
+        # 5. Provenance Metadata
+        provenance = {
+            'source_url': normalized_url,
+            'ticker': ticker,
+            'extracted_at_utc': datetime.now(timezone.utc).isoformat(),
+            'reporting_type': 'Consolidated' if is_consolidated else 'Standalone',
+            'has_cash_flow': not cf_df.empty,
+            'has_ratios': not ratios_df.empty,
+            'historical_years_available': [c for c in pl_df.columns if c != 'TTM']
+        }
+
         return {
-            'url': url,
+            'url': normalized_url,
             'company_name': company_name,
             'ticker': ticker,
             'kpis': top_kpis,
@@ -114,6 +210,7 @@ class ScreenerScraper:
             'ratios': ratios_df,
             'quarters': quarters_df,
             'shareholding': shareholding_df,
+            'provenance': provenance,
         }
 
     def _parse_table_section(self, soup: BeautifulSoup, section_id: str) -> pd.DataFrame:
@@ -126,7 +223,6 @@ class ScreenerScraper:
         if not table:
             return pd.DataFrame()
             
-        # Extract headers (Fiscal Years)
         thead = table.find('thead')
         if not thead:
             return pd.DataFrame()
@@ -137,7 +233,6 @@ class ScreenerScraper:
             if t:
                 headers.append(t)
                 
-        # Extract rows
         tbody = table.find('tbody')
         if not tbody:
             return pd.DataFrame()
@@ -155,7 +250,6 @@ class ScreenerScraper:
             for td in tds[1:]:
                 vals.append(clean_number(td.text))
                 
-            # Align vals with headers length
             if len(vals) < len(headers):
                 vals.extend([None] * (len(headers) - len(vals)))
             elif len(vals) > len(headers):
