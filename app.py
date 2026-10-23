@@ -2,24 +2,7 @@
 Kavach Financial | Multi-Asset Capital Allocator & Valuation Terminal
 Google Finance, TradingView & Screener.in Integrated Pro Dark Terminal
 
-Featuring:
-1. Universal Capital Allocator & Trade-Off Engine:
-   - Goal & Horizon-Based Suitability Diagnostics
-   - Fit-Mismatch & Downside Risk Detection
-   - Side-by-Side Multi-Asset Trade-Off Comparator (FDs, Arbitrage, G-Secs, SGBs, Mutual Funds, Stocks)
-   - Budget 2024 Post-Tax Net Yield & Real Purchasing Power Modeling
-2. Multi-Asset Product Deep-Dive Calculators:
-   - Fixed Deposits (DICGC ₹5L cover, TDS, quarterly compounding)
-   - Mutual Funds & ETFs (Direct vs Regular fee drag, SIP/Lumpsum, rolling return risk)
-   - Sovereign Gold Bonds (SGB) vs Gold ETFs vs Physical Gold
-   - Government Securities (G-Secs) & Corporate Bonds (YTM, Duration, Rate Shocks)
-3. Company DCF Screener & Institutional Valuation Suite:
-   - 70+ Preloaded Indian Equities + Screener 5,000+ API search
-   - Google Finance Style Area Charts, Range Selectors & Stats Grid
-   - Screener-style Dual-Axis Valuation Multiples (Price to BV, PE vs Median)
-   - Beginner Friendly Verdicts & 4-Pillar Traffic Light Scorecards
-   - Full 3-Statement Forecast, DCF Waterfall & 8-Sheet Excel Model Export
-4. Market Discovery Hub & Regulatory Disclaimers
+Self-contained deployment edition for Streamlit Community Cloud.
 """
 
 import os
@@ -29,6 +12,7 @@ import re
 import math
 import urllib.parse
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
 
 # Prioritize current application directory in sys.path for Streamlit Cloud
@@ -43,6 +27,9 @@ import requests
 import plotly.graph_objects as go
 import plotly.express as px
 
+# -----------------------------------------------------------------------------
+# CORE STOCK MODEL IMPORTS (With fallback to src)
+# -----------------------------------------------------------------------------
 try:
     from screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
@@ -54,12 +41,6 @@ try:
     from dcf_model import DCFValuationEngine, ValuationValidationError
     from workbook_builder import WorkbookBuilder
     from news_sentiment_engine import NewsSentimentEngine
-    from fd_calculator import FixedDepositCalculator, FDParameters
-    from mutual_fund_analyzer import MutualFundAnalyzer, MutualFundParameters
-    from gold_engine import GoldEngine, GoldInvestmentParameters
-    from bond_engine import BondEngine, BondParameters
-    from suitability_engine import SuitabilityEngine, GoalProfile
-    from tradeoff_comparator import TradeOffComparator, TradeOffRow
 except ImportError:
     from src.scraper.screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
@@ -71,14 +52,751 @@ except ImportError:
     from src.valuation.dcf_model import DCFValuationEngine, ValuationValidationError
     from src.excel.workbook_builder import WorkbookBuilder
     from src.news.news_sentiment_engine import NewsSentimentEngine
-    from fd_calculator import FixedDepositCalculator, FDParameters
-    from mutual_fund_analyzer import MutualFundAnalyzer, MutualFundParameters
-    from gold_engine import GoldEngine, GoldInvestmentParameters
-    from bond_engine import BondEngine, BondParameters
-    from suitability_engine import SuitabilityEngine, GoalProfile
-    from tradeoff_comparator import TradeOffComparator, TradeOffRow
 
-# Page configuration
+
+# =============================================================================
+# SELF-CONTAINED MULTI-ASSET ENGINES (Budget 2024 Rules)
+# Embedded directly so Streamlit Cloud never encounters ModuleNotFoundError!
+# =============================================================================
+
+# -------------------- 1. FIXED DEPOSIT CALCULATOR --------------------
+@dataclass
+class FDParameters:
+    principal: float
+    tenure_months: int
+    interest_rate_pct: float
+    compounding_frequency: str = "quarterly"
+    tax_bracket_pct: float = 30.0
+    is_senior_citizen: bool = False
+    institution_type: str = "scheduled_commercial_bank"
+    expected_inflation_pct: float = 6.0
+    premature_penalty_pct: float = 1.0
+
+
+@dataclass
+class FDAnalysisResult:
+    principal: float
+    tenure_months: int
+    gross_maturity_amount: float
+    gross_interest_earned: float
+    tds_deducted: float
+    total_tax_liability: float
+    net_maturity_amount: float
+    net_post_tax_interest: float
+    effective_annual_yield_pct: float
+    net_post_tax_annual_yield_pct: float
+    real_inflation_adjusted_yield_pct: float
+    dicgc_covered_amount: float
+    dicgc_uncovered_amount: float
+    dicgc_coverage_status: str
+    tds_applicability_note: str
+    premature_exit_value: float
+    quarterly_schedule: List[Dict[str, Any]]
+    key_risks_and_notes: List[str]
+
+
+class FixedDepositCalculator:
+    DICGC_MAX_LIMIT = 500000.0
+    TDS_THRESHOLD_GENERAL = 40000.0
+    TDS_THRESHOLD_SENIOR = 50000.0
+
+    @classmethod
+    def calculate(cls, params: FDParameters) -> FDAnalysisResult:
+        if params.principal <= 0:
+            raise ValueError("Principal amount must be greater than zero.")
+        if params.tenure_months <= 0:
+            raise ValueError("Tenure in months must be at least 1 month.")
+        if params.interest_rate_pct < 0:
+            raise ValueError("Interest rate cannot be negative.")
+
+        r = params.interest_rate_pct / 100.0
+        t_years = params.tenure_months / 12.0
+        freq = params.compounding_frequency.lower()
+        n = 12 if freq == "monthly" else (4 if freq == "quarterly" else (2 if freq == "half_yearly" else (1 if freq == "annual" else 0)))
+
+        if n > 0:
+            gross_maturity = params.principal * math.pow(1.0 + (r / n), n * t_years)
+        else:
+            gross_maturity = params.principal * (1.0 + (r * t_years))
+
+        gross_interest = gross_maturity - params.principal
+        effective_annual_yield = ((math.pow(gross_maturity / params.principal, 1.0 / t_years) - 1.0) * 100.0) if t_years > 0 else params.interest_rate_pct
+
+        annual_interest_approx = gross_interest / max(t_years, 1.0)
+        tds_threshold = cls.TDS_THRESHOLD_SENIOR if params.is_senior_citizen else cls.TDS_THRESHOLD_GENERAL
+        tds_applicable = (annual_interest_approx > tds_threshold) and (params.institution_type != "post_office")
+        estimated_tds = gross_interest * 0.10 if tds_applicable else 0.0
+
+        tax_bracket_rate = params.tax_bracket_pct / 100.0
+        total_tax_liability = gross_interest * tax_bracket_rate
+        net_post_tax_interest = gross_interest - total_tax_liability
+        net_maturity = params.principal + net_post_tax_interest
+
+        net_post_tax_yield = ((math.pow(net_maturity / params.principal, 1.0 / t_years) - 1.0) * 100.0) if t_years > 0 else (effective_annual_yield * (1.0 - tax_bracket_rate))
+        i_rate = params.expected_inflation_pct / 100.0
+        real_yield_pct = (((1.0 + (net_post_tax_yield / 100.0)) / (1.0 + i_rate)) - 1.0) * 100.0
+
+        if params.institution_type == "post_office":
+            dicgc_covered = gross_maturity
+            dicgc_uncovered = 0.0
+            dicgc_status = "100% Sovereign Guaranteed (Ministry of Finance, Govt of India)"
+        elif params.institution_type in ["scheduled_commercial_bank", "small_finance_bank"]:
+            dicgc_covered = min(gross_maturity, cls.DICGC_MAX_LIMIT)
+            dicgc_uncovered = max(0.0, gross_maturity - cls.DICGC_MAX_LIMIT)
+            dicgc_status = f"₹5,00,000 Insured by DICGC (RBI). ₹{dicgc_uncovered:,.0f} above insurance cap." if dicgc_uncovered > 0 else "100% Insured under DICGC ₹5 Lakh limit."
+        else:
+            dicgc_covered = 0.0
+            dicgc_uncovered = gross_maturity
+            dicgc_status = "Zero DICGC Cover. Subject to issuer corporate credit rating."
+
+        half_t = max(t_years * 0.5, 0.25)
+        penalized_r = max((params.interest_rate_pct - params.premature_penalty_pct) / 100.0, 0.01)
+        premature_exit_val = params.principal * math.pow(1.0 + (penalized_r / 4.0), 4.0 * half_t)
+
+        tds_note = f"TDS @ 10% (₹{estimated_tds:,.0f}) deducted by bank as interest exceeds ₹{tds_threshold:,.0f}. Final tax at {params.tax_bracket_pct:.0f}% slab is ₹{total_tax_liability:,.0f}." if tds_applicable else f"No TDS deducted (annual interest < ₹{tds_threshold:,.0f}). Taxed at {params.tax_bracket_pct:.0f}% in ITR."
+
+        quarterly_schedule: List[Dict[str, Any]] = []
+        total_quarters = max(int(params.tenure_months / 3), 1)
+        q_rate = r / 4.0
+        curr_bal = params.principal
+        for q in range(1, total_quarters + 1):
+            q_interest = curr_bal * q_rate
+            curr_bal += q_interest
+            quarterly_schedule.append({
+                "quarter": q, "month": q * 3,
+                "opening_balance": round(curr_bal - q_interest, 2),
+                "quarterly_interest": round(q_interest, 2),
+                "closing_balance": round(curr_bal, 2),
+            })
+
+        risks = []
+        if real_yield_pct < 0:
+            risks.append(f"Negative Real Return: Net yield ({net_post_tax_yield:.2f}%) trails inflation ({params.expected_inflation_pct:.1f}%).")
+        if dicgc_uncovered > 0:
+            risks.append(f"Uncovered Balance: ₹{dicgc_uncovered:,.0f} is above DICGC ₹5L cover.")
+
+        return FDAnalysisResult(
+            principal=params.principal, tenure_months=params.tenure_months,
+            gross_maturity_amount=round(gross_maturity, 2), gross_interest_earned=round(gross_interest, 2),
+            tds_deducted=round(estimated_tds, 2), total_tax_liability=round(total_tax_liability, 2),
+            net_maturity_amount=round(net_maturity, 2), net_post_tax_interest=round(net_post_tax_interest, 2),
+            effective_annual_yield_pct=round(effective_annual_yield, 2),
+            net_post_tax_annual_yield_pct=round(net_post_tax_yield, 2),
+            real_inflation_adjusted_yield_pct=round(real_yield_pct, 2),
+            dicgc_covered_amount=round(dicgc_covered, 2), dicgc_uncovered_amount=round(dicgc_uncovered, 2),
+            dicgc_coverage_status=dicgc_status, tds_applicability_note=tds_note,
+            premature_exit_value=round(premature_exit_val, 2), quarterly_schedule=quarterly_schedule,
+            key_risks_and_notes=risks
+        )
+
+
+# -------------------- 2. MUTUAL FUND ANALYZER --------------------
+@dataclass
+class MutualFundParameters:
+    investment_mode: str = "lumpsum"
+    investment_amount: float = 100000.0
+    tenure_years: float = 5.0
+    category: str = "flexi_cap"
+    expected_cagr_pct: float = 12.0
+    direct_expense_ratio_pct: float = 0.65
+    regular_expense_ratio_pct: float = 1.65
+    tax_bracket_pct: float = 30.0
+    expected_inflation_pct: float = 6.0
+
+
+@dataclass
+class MutualFundAnalysisResult:
+    investment_mode: str
+    total_invested_capital: float
+    tenure_years: float
+    category_name: str
+    direct_corpus: float
+    regular_corpus: float
+    expense_drag_lost_wealth: float
+    gross_gains_direct: float
+    estimated_tax_budget_2024: float
+    net_post_tax_corpus: float
+    net_cagr_post_tax_pct: float
+    real_inflation_adjusted_cagr_pct: float
+    tax_treatment_summary: str
+    historical_risk_profile: Dict[str, Any]
+    wealth_growth_schedule: List[Dict[str, Any]]
+    suitability_verdict: str
+    cautions_and_warnings: List[str]
+
+
+class MutualFundAnalyzer:
+    CATEGORIES = {
+        "large_cap": {"name": "Large Cap Equity / Nifty 50 Index", "typical_cagr": 12.0, "direct_ter": 0.35, "regular_ter": 1.25, "equity_tax_status": True, "min_recommended_horizon_years": 5.0},
+        "flexi_cap": {"name": "Flexi Cap Equity Fund", "typical_cagr": 13.5, "direct_ter": 0.70, "regular_ter": 1.75, "equity_tax_status": True, "min_recommended_horizon_years": 5.0},
+        "mid_cap": {"name": "Mid Cap Equity Fund", "typical_cagr": 15.0, "direct_ter": 0.75, "regular_ter": 1.85, "equity_tax_status": True, "min_recommended_horizon_years": 7.0},
+        "arbitrage": {"name": "Arbitrage Fund (Cash-Futures Spread)", "typical_cagr": 7.0, "direct_ter": 0.30, "regular_ter": 0.95, "equity_tax_status": True, "min_recommended_horizon_years": 0.5},
+        "liquid": {"name": "Liquid / Overnight Debt Fund", "typical_cagr": 6.6, "direct_ter": 0.15, "regular_ter": 0.35, "equity_tax_status": False, "min_recommended_horizon_years": 0.1},
+        "aggressive_hybrid": {"name": "Aggressive Hybrid Fund (65-80% Equity)", "typical_cagr": 11.5, "direct_ter": 0.65, "regular_ter": 1.60, "equity_tax_status": True, "min_recommended_horizon_years": 3.0}
+    }
+
+    EQUITY_LTCG_EXEMPTION = 125000.0
+    EQUITY_LTCG_TAX_RATE = 0.125
+    EQUITY_STCG_TAX_RATE = 0.200
+
+    @classmethod
+    def analyze(cls, params: MutualFundParameters) -> MutualFundAnalysisResult:
+        cat_key = params.category if params.category in cls.CATEGORIES else "flexi_cap"
+        cat_info = cls.CATEGORIES[cat_key]
+        cagr = params.expected_cagr_pct / 100.0
+        ter_dir = params.direct_expense_ratio_pct / 100.0
+        ter_reg = params.regular_expense_ratio_pct / 100.0
+        t_years = max(params.tenure_years, 0.25)
+
+        net_cagr_direct = max(cagr - ter_dir, -0.90)
+        net_cagr_reg = max(cagr - ter_reg, -0.90)
+
+        if params.investment_mode.lower() == "sip":
+            total_invested = params.investment_amount * 12.0 * t_years
+            months = int(t_years * 12)
+            r_month_dir = math.pow(1.0 + net_cagr_direct, 1.0 / 12.0) - 1.0
+            r_month_reg = math.pow(1.0 + net_cagr_reg, 1.0 / 12.0) - 1.0
+            direct_corpus, regular_corpus = 0.0, 0.0
+            for _ in range(months):
+                direct_corpus = (direct_corpus + params.investment_amount) * (1.0 + r_month_dir)
+                regular_corpus = (regular_corpus + params.investment_amount) * (1.0 + r_month_reg)
+        else:
+            total_invested = params.investment_amount
+            direct_corpus = total_invested * math.pow(1.0 + net_cagr_direct, t_years)
+            regular_corpus = total_invested * math.pow(1.0 + net_cagr_reg, t_years)
+
+        lost_wealth = max(0.0, direct_corpus - regular_corpus)
+        gross_gains_direct = max(0.0, direct_corpus - total_invested)
+
+        if cat_info["equity_tax_status"]:
+            if t_years >= 1.0:
+                taxable_gain = max(0.0, gross_gains_direct - cls.EQUITY_LTCG_EXEMPTION)
+                tax_liability = taxable_gain * cls.EQUITY_LTCG_TAX_RATE
+                tax_summary = f"Equity LTCG (Budget 2024): 12.5% tax above ₹1.25 Lakh exemption. Estimated Tax: ₹{tax_liability:,.0f}."
+            else:
+                tax_liability = gross_gains_direct * cls.EQUITY_STCG_TAX_RATE
+                tax_summary = f"Equity STCG (Budget 2024): 20.0% flat tax on gains < 12 mos. Estimated Tax: ₹{tax_liability:,.0f}."
+        else:
+            tax_liability = gross_gains_direct * (params.tax_bracket_pct / 100.0)
+            tax_summary = f"Debt Fund Slab Tax: Gains taxed at your {params.tax_bracket_pct:.0f}% slab rate. Estimated Tax: ₹{tax_liability:,.0f}."
+
+        net_corpus = direct_corpus - tax_liability
+        net_cagr_post_tax = ((math.pow(net_corpus / total_invested, 1.0 / t_years) - 1.0) * 100.0) if total_invested > 0 and t_years > 0 else 0.0
+        real_cagr_pct = (((1.0 + (net_cagr_post_tax / 100.0)) / (1.0 + (params.expected_inflation_pct / 100.0))) - 1.0) * 100.0
+
+        schedule: List[Dict[str, Any]] = []
+        for yr in range(1, max(int(t_years), 1) + 1):
+            if params.investment_mode.lower() == "sip":
+                inv_so_far = params.investment_amount * 12.0 * yr
+                dir_val, reg_val = 0.0, 0.0
+                r_m_d = math.pow(1.0 + net_cagr_direct, 1.0 / 12.0) - 1.0
+                r_m_r = math.pow(1.0 + net_cagr_reg, 1.0 / 12.0) - 1.0
+                for _ in range(yr * 12):
+                    dir_val = (dir_val + params.investment_amount) * (1.0 + r_m_d)
+                    reg_val = (reg_val + params.investment_amount) * (1.0 + r_m_r)
+            else:
+                inv_so_far = total_invested
+                dir_val = total_invested * math.pow(1.0 + net_cagr_direct, yr)
+                reg_val = total_invested * math.pow(1.0 + net_cagr_reg, yr)
+            schedule.append({
+                "year": yr, "invested_capital": round(inv_so_far, 2),
+                "direct_corpus": round(dir_val, 2), "regular_corpus": round(reg_val, 2),
+                "advisor_commission_drag": round(max(0.0, dir_val - reg_val), 2)
+            })
+
+        verdict = f"Aligned Horizon: {t_years:.1f} Yrs fits {cat_info['name']}." if t_years >= cat_info["min_recommended_horizon_years"] else f"Horizon Warning: {t_years:.1f} Yrs is below recommended {cat_info['min_recommended_horizon_years']:.0f}+ Yrs."
+        cautions = [f"Intermediary Commission Drag: ₹{lost_wealth:,.0f} lost to distributor commissions in regular plans."] if lost_wealth > 20000 else []
+
+        return MutualFundAnalysisResult(
+            investment_mode=params.investment_mode.upper(), total_invested_capital=round(total_invested, 2),
+            tenure_years=params.tenure_years, category_name=cat_info["name"],
+            direct_corpus=round(direct_corpus, 2), regular_corpus=round(regular_corpus, 2),
+            expense_drag_lost_wealth=round(lost_wealth, 2), gross_gains_direct=round(gross_gains_direct, 2),
+            estimated_tax_budget_2024=round(tax_liability, 2), net_post_tax_corpus=round(net_corpus, 2),
+            net_cagr_post_tax_pct=round(net_cagr_post_tax, 2), real_inflation_adjusted_cagr_pct=round(real_cagr_pct, 2),
+            tax_treatment_summary=tax_summary, historical_risk_profile=cat_info, wealth_growth_schedule=schedule,
+            suitability_verdict=verdict, cautions_and_warnings=cautions
+        )
+
+
+# -------------------- 3. GOLD & SGB ENGINE --------------------
+@dataclass
+class GoldInvestmentParameters:
+    investment_amount: float = 100000.0
+    tenure_years: float = 8.0
+    expected_gold_cagr_pct: float = 8.5
+    tax_bracket_pct: float = 30.0
+    sgb_coupon_rate_pct: float = 2.50
+    gold_etf_ter_pct: float = 0.40
+    physical_gold_making_and_gst_pct: float = 8.0
+    annual_locker_cost: float = 1500.0
+
+
+@dataclass
+class GoldComparisonResult:
+    investment_amount: float
+    tenure_years: float
+    expected_gold_cagr_pct: float
+    sgb_total_payout: float
+    sgb_net_gains: float
+    sgb_net_cagr_pct: float
+    etf_total_payout: float
+    etf_net_gains: float
+    etf_net_cagr_pct: float
+    physical_total_payout: float
+    physical_net_gains: float
+    physical_net_cagr_pct: float
+    sgb_advantage_vs_etf: float
+    sgb_advantage_vs_physical: float
+    tax_comparison_notes: Dict[str, str]
+    cash_flow_schedule: List[Dict[str, Any]]
+    key_takeaways: List[str]
+
+
+class GoldEngine:
+    @classmethod
+    def compare(cls, params: GoldInvestmentParameters) -> GoldComparisonResult:
+        amt = params.investment_amount
+        t = max(params.tenure_years, 1.0)
+        g_cagr = params.expected_gold_cagr_pct / 100.0
+        tax_slab = params.tax_bracket_pct / 100.0
+
+        # SGB: Gold appreciation + 2.5% coupon (slab taxed) + 100% tax free at maturity
+        sgb_gold_value = amt * math.pow(1.0 + g_cagr, t)
+        annual_net_coupon = (amt * (params.sgb_coupon_rate_pct / 100.0)) * (1.0 - tax_slab)
+        total_coupons = annual_net_coupon * t
+        sgb_cg_tax = 0.0 if t >= 5.0 else (sgb_gold_value - amt) * 0.125
+        sgb_total_payout = sgb_gold_value - sgb_cg_tax + total_coupons
+        sgb_net_gains = sgb_total_payout - amt
+        sgb_net_cagr = ((math.pow(sgb_total_payout / amt, 1.0 / t) - 1.0) * 100.0)
+
+        # Gold ETF: 12.5% LTCG after 12 months + expense ratio
+        etf_ter = params.gold_etf_ter_pct / 100.0
+        etf_gross = amt * math.pow(1.0 + max(g_cagr - etf_ter, -0.9), t)
+        etf_gains = max(0.0, etf_gross - amt)
+        etf_tax = etf_gains * 0.125 if t >= 1.0 else etf_gains * 0.20
+        etf_total_payout = etf_gross - etf_tax
+        etf_net_gains = etf_total_payout - amt
+        etf_net_cagr = ((math.pow(etf_total_payout / amt, 1.0 / t) - 1.0) * 100.0)
+
+        # Physical Gold: 3% GST + Making charge friction + locker rent
+        friction_rate = params.physical_gold_making_and_gst_pct / 100.0
+        eff_gold = amt / (1.0 + friction_rate)
+        phys_gross = eff_gold * math.pow(1.0 + g_cagr, t)
+        phys_net_pretax = max(0.0, phys_gross - (params.annual_locker_cost * t))
+        phys_gains = max(0.0, phys_net_pretax - amt)
+        phys_tax = phys_gains * 0.125 if t >= 2.0 else phys_gains * tax_slab
+        phys_total_payout = phys_net_pretax - phys_tax
+        phys_net_gains = phys_total_payout - amt
+        phys_net_cagr = ((math.pow(max(phys_total_payout, 1.0) / amt, 1.0 / t) - 1.0) * 100.0)
+
+        schedule: List[Dict[str, Any]] = []
+        for yr in range(1, int(t) + 1):
+            s_val = (amt * math.pow(1.0 + g_cagr, yr)) + (annual_net_coupon * yr)
+            e_val = amt * math.pow(1.0 + max(g_cagr - etf_ter, -0.9), yr)
+            p_val = (eff_gold * math.pow(1.0 + g_cagr, yr)) - (params.annual_locker_cost * yr)
+            schedule.append({
+                "year": yr, "sgb_cumulative_value": round(s_val, 2),
+                "gold_etf_value": round(e_val, 2), "physical_gold_value": round(p_val, 2)
+            })
+
+        takeaways = [
+            f"SGB Advantage: Generates ₹{sgb_total_payout - etf_total_payout:,.0f} more than Gold ETFs and ₹{sgb_total_payout - phys_total_payout:,.0f} more than Physical Gold.",
+            "Tax-Free Redemption: SGB capital gains are 100% exempt from income tax at RBI maturity (8 years).",
+            "Liquidity Note: Gold ETFs provide instant intraday liquidity on NSE/BSE. SGB secondary markets can trade at discounts."
+        ]
+
+        return GoldComparisonResult(
+            investment_amount=amt, tenure_years=t, expected_gold_cagr_pct=params.expected_gold_cagr_pct,
+            sgb_total_payout=round(sgb_total_payout, 2), sgb_net_gains=round(sgb_net_gains, 2),
+            sgb_net_cagr_pct=round(sgb_net_cagr, 2), etf_total_payout=round(etf_total_payout, 2),
+            etf_net_gains=round(etf_net_gains, 2), etf_net_cagr_pct=round(etf_net_cagr, 2),
+            physical_total_payout=round(phys_total_payout, 2), physical_net_gains=round(phys_net_gains, 2),
+            physical_net_cagr_pct=round(phys_net_cagr, 2), sgb_advantage_vs_etf=round(sgb_total_payout - etf_total_payout, 2),
+            sgb_advantage_vs_physical=round(sgb_total_payout - phys_total_payout, 2),
+            tax_comparison_notes={"SGB": "100% Tax Free at maturity", "ETF": "12.5% LTCG", "Physical": "12.5% LTCG + GST friction"},
+            cash_flow_schedule=schedule, key_takeaways=takeaways
+        )
+
+
+# -------------------- 4. BOND & DURATION ENGINE --------------------
+@dataclass
+class BondParameters:
+    face_value: float = 1000.0
+    market_price: float = 1000.0
+    coupon_rate_pct: float = 7.10
+    tenure_years: float = 10.0
+    coupon_frequency: int = 2
+    instrument_type: str = "g_sec"
+    credit_rating: str = "SOVEREIGN"
+    tax_bracket_pct: float = 30.0
+    expected_inflation_pct: float = 6.0
+
+
+@dataclass
+class BondAnalysisResult:
+    face_value: float
+    market_price: float
+    coupon_rate_pct: float
+    tenure_years: float
+    coupon_frequency: int
+    instrument_name: str
+    credit_rating: str
+    ytm_pct: float
+    current_yield_pct: float
+    macaulay_duration_years: float
+    modified_duration_years: float
+    price_change_rate_hike_100bp_pct: float
+    price_change_rate_cut_100bp_pct: float
+    total_coupons_expected: float
+    gross_terminal_cashflow: float
+    net_post_tax_ytm_pct: float
+    real_inflation_adjusted_ytm_pct: float
+    cash_flow_schedule: List[Dict[str, Any]]
+    credit_risk_assessment: str
+    taxation_summary: str
+    key_observations: List[str]
+
+
+class BondEngine:
+    INSTRUMENTS = {
+        "g_sec": {"name": "Central Government Security (G-Sec)", "default_rating": "SOVEREIGN"},
+        "t_bill": {"name": "Treasury Bill (91 / 182 / 364 Days)", "default_rating": "SOVEREIGN"},
+        "psu_aaa": {"name": "PSU Bond (REC/PFC/NABARD)", "default_rating": "AAA"},
+        "corporate_aa": {"name": "Corporate Bond (Tier 1 Private)", "default_rating": "AA"},
+        "corporate_high_yield": {"name": "High Yield Bond / SDI", "default_rating": "A / BBB"},
+    }
+
+    @classmethod
+    def calculate_ytm(cls, face_value: float, price: float, coupon_rate: float, tenure_years: float, frequency: int = 2) -> float:
+        if price <= 0 or tenure_years <= 0:
+            return 0.0
+        n_periods = int(round(tenure_years * frequency))
+        if n_periods == 0:
+            return 0.0
+        c_period = (face_value * (coupon_rate / 100.0)) / frequency
+        if c_period == 0:
+            return ((math.pow(face_value / price, 1.0 / tenure_years) - 1.0) * 100.0)
+
+        low, high = 0.000001, 1.0
+        for _ in range(80):
+            mid = (low + high) / 2.0
+            pv = sum([c_period / math.pow(1.0 + mid, t) for t in range(1, n_periods + 1)]) + (face_value / math.pow(1.0 + mid, n_periods))
+            if abs(pv - price) < 1e-5:
+                return mid * frequency * 100.0
+            if pv > price:
+                low = mid
+            else:
+                high = mid
+        return ((low + high) / 2.0) * frequency * 100.0
+
+    @classmethod
+    def analyze(cls, params: BondParameters) -> BondAnalysisResult:
+        inst_key = params.instrument_type if params.instrument_type in cls.INSTRUMENTS else "g_sec"
+        inst_info = cls.INSTRUMENTS[inst_key]
+        freq = max(params.coupon_frequency, 1)
+        t_years = max(params.tenure_years, 0.25)
+        n_periods = int(round(t_years * freq))
+        c_payment = (params.face_value * (params.coupon_rate_pct / 100.0)) / freq
+
+        ytm = cls.calculate_ytm(params.face_value, params.market_price, params.coupon_rate_pct, t_years, freq)
+        y_p = (ytm / 100.0) / freq
+
+        if y_p > 0 and n_periods > 0:
+            pv_cf_sum = sum([(c_payment + (params.face_value if t == n_periods else 0.0)) / math.pow(1.0 + y_p, t) for t in range(1, n_periods + 1)])
+            w_cf_sum = sum([((t / freq) * (c_payment + (params.face_value if t == n_periods else 0.0))) / math.pow(1.0 + y_p, t) for t in range(1, n_periods + 1)])
+            macaulay = w_cf_sum / max(pv_cf_sum, 0.001)
+            modified = macaulay / (1.0 + y_p)
+        else:
+            macaulay, modified = t_years, t_years
+
+        price_hike_100bp = - modified * 1.0
+        price_cut_100bp = modified * 1.0
+        current_yield = (params.face_value * (params.coupon_rate_pct / 100.0) / params.market_price) * 100.0
+
+        total_coupons = c_payment * n_periods
+        gross_terminal = total_coupons + params.face_value
+
+        tax_slab = params.tax_bracket_pct / 100.0
+        net_coupons = total_coupons * (1.0 - tax_slab)
+        cap_gain = max(0.0, params.face_value - params.market_price)
+        cg_tax = cap_gain * 0.125 if t_years >= 1.0 else cap_gain * tax_slab
+        net_terminal = params.face_value - cg_tax + net_coupons
+        net_post_tax_ytm = ((math.pow(net_terminal / params.market_price, 1.0 / t_years) - 1.0) * 100.0) if params.market_price > 0 and t_years > 0 else (ytm * (1.0 - tax_slab))
+        real_ytm = (((1.0 + (net_post_tax_ytm / 100.0)) / (1.0 + (params.expected_inflation_pct / 100.0))) - 1.0) * 100.0
+
+        schedule: List[Dict[str, Any]] = []
+        for period in range(1, min(n_periods + 1, 15)):
+            cf = c_payment + (params.face_value if period == n_periods else 0.0)
+            schedule.append({
+                "period": period, "year": round(period / freq, 2),
+                "coupon_received": round(c_payment, 2),
+                "principal_repayment": round(params.face_value if period == n_periods else 0.0, 2),
+                "total_cashflow": round(cf, 2)
+            })
+
+        credit_assess = "Zero Credit Risk: 100% sovereign backing." if params.credit_rating == "SOVEREIGN" else f"Credit Rating: {params.credit_rating}."
+        tax_sum = f"Coupons taxed at {params.tax_bracket_pct:.0f}% slab. Discount redemption taxed at 12.5% LTCG."
+
+        return BondAnalysisResult(
+            face_value=params.face_value, market_price=params.market_price, coupon_rate_pct=params.coupon_rate_pct,
+            tenure_years=t_years, coupon_frequency=freq, instrument_name=inst_info["name"], credit_rating=params.credit_rating,
+            ytm_pct=round(ytm, 2), current_yield_pct=round(current_yield, 2), macaulay_duration_years=round(macaulay, 2),
+            modified_duration_years=round(modified, 2), price_change_rate_hike_100bp_pct=round(price_hike_100bp, 2),
+            price_change_rate_cut_100bp_pct=round(price_cut_100bp, 2), total_coupons_expected=round(total_coupons, 2),
+            gross_terminal_cashflow=round(gross_terminal, 2), net_post_tax_ytm_pct=round(net_post_tax_ytm, 2),
+            real_inflation_adjusted_ytm_pct=round(real_ytm, 2), cash_flow_schedule=schedule, credit_risk_assessment=credit_assess,
+            taxation_summary=tax_sum, key_observations=[f"Modified Duration: {modified:.2f} Yrs (Sensitivity: ~{abs(price_hike_100bp):.2f}% per 100 bps rate change)."]
+        )
+
+
+# -------------------- 5. SUITABILITY ENGINE --------------------
+@dataclass
+class GoalProfile:
+    goal_name: str = "Wealth Building"
+    investment_amount: float = 200000.0
+    horizon_months: int = 36
+    liquidity_need: str = "moderate"
+    risk_profile: str = "moderate"
+    tax_bracket_pct: float = 30.0
+
+
+@dataclass
+class AssetSuitabilityScore:
+    asset_class: str
+    display_name: str
+    suitability_score: int
+    fit_status: str
+    fit_color: str
+    primary_reason: str
+    tax_efficiency_rating: str
+
+
+@dataclass
+class SuitabilityDiagnosis:
+    goal_profile: GoalProfile
+    asset_scores: List[AssetSuitabilityScore]
+    top_recommended_asset: str
+    critical_warnings: List[str]
+    tax_optimization_tips: List[str]
+
+
+class SuitabilityEngine:
+    @classmethod
+    def diagnose(cls, profile: GoalProfile) -> SuitabilityDiagnosis:
+        h_months = max(profile.horizon_months, 1)
+        h_years = h_months / 12.0
+        risk = profile.risk_profile.lower()
+        tax = profile.tax_bracket_pct
+
+        scores: List[AssetSuitabilityScore] = []
+        warnings: List[str] = []
+        tax_tips: List[str] = []
+
+        # 1. Bank FD
+        fd_score = 75
+        if h_months <= 24:
+            fd_score += 20
+        elif h_months > 60:
+            fd_score -= 30
+        if tax >= 20.0:
+            fd_score -= 15
+            fd_tax = "Poor (Slab Taxed)"
+            tax_tips.append(f"FD Tax Drag: At {tax:.0f}% slab, FD interest is taxed without indexation. Arbitrage funds offer superior post-tax yield.")
+        else:
+            fd_tax = "Medium"
+        scores.append(cls._build("bank_fd", "Fixed Deposit / T-Bills", fd_score, fd_tax, "Capital preservation for short horizons; tax-heavy for long tenures."))
+
+        # 2. Arbitrage Funds
+        arb_score = 80
+        if h_months <= 36:
+            arb_score += 15
+        if tax >= 20.0:
+            arb_score += 15
+            arb_tax = "High (Equity 12.5% LTCG)"
+        else:
+            arb_tax = "Medium"
+        scores.append(cls._build("arbitrage_liquid", "Arbitrage / Liquid Mutual Funds", arb_score, arb_tax, "FD-like stability with equity taxation (12.5% LTCG vs 30% slab)."))
+
+        # 3. SGB / Gold
+        sgb_score = 55
+        if 48 <= h_months <= 96:
+            sgb_score += 30
+        elif h_months < 36:
+            sgb_score -= 35
+            warnings.append("Gold Volatility Risk: Gold price cycles fluctuate over short horizons (< 3 years).")
+        scores.append(cls._build("sgb_gold", "Sovereign Gold Bonds / Gold", sgb_score, "High (100% Tax Free at Maturity)", "2.5% coupon + 100% tax-free gains; best for 5-8 year horizons."))
+
+        # 4. G-Secs / Bonds
+        bond_score = 65
+        if 24 <= h_months <= 84:
+            bond_score += 15
+        scores.append(cls._build("bonds_gsec", "Government Securities (G-Secs)", bond_score, "Medium (Slab Taxed)", "Zero credit risk; locks in sovereign yield."))
+
+        # 5. Equity Mutual Funds
+        eq_score = 50
+        if h_months >= 60:
+            eq_score += 40
+        elif h_months < 36:
+            eq_score -= 45
+            warnings.append(f"Equity Horizon Mismatch: Stated horizon of {h_months} months is too short for equity volatility. Negative return probability is elevated.")
+        if risk == "aggressive":
+            eq_score += 10
+        scores.append(cls._build("equity_mf", "Equity Diversified / Index Funds", eq_score, "High (12.5% LTCG)", f"Wealth compounding beating inflation for 5+ year horizons."))
+
+        # 6. Direct Stocks
+        stk_score = 40
+        if h_months >= 60 and risk == "aggressive":
+            stk_score += 45
+        elif h_months < 36:
+            stk_score -= 40
+            warnings.append(f"Direct Stock Risk: Holding individual stocks for {h_months} months exposes capital to company earnings shocks.")
+        scores.append(cls._build("direct_stocks", "Direct Listed Equities (DCF Selected)", stk_score, "High (12.5% LTCG)", "High upside with fundamental margin of safety; requires 5+ years."))
+
+        scores.sort(key=lambda x: x.suitability_score, reverse=True)
+        return SuitabilityDiagnosis(
+            goal_profile=profile, asset_scores=scores, top_recommended_asset=scores[0].display_name,
+            critical_warnings=warnings, tax_optimization_tips=tax_tips
+        )
+
+    @classmethod
+    def _build(cls, aid: str, name: str, score: int, tax_eff: str, reason: str) -> AssetSuitabilityScore:
+        clamped = max(10, min(95, score))
+        status = "High Fit" if clamped >= 70 else ("Moderate Fit" if clamped >= 45 else "Mismatch / Unsuitable")
+        color = "#10b981" if clamped >= 70 else ("#f59e0b" if clamped >= 45 else "#ef4444")
+        return AssetSuitabilityScore(
+            asset_class=aid, display_name=name, suitability_score=clamped,
+            fit_status=status, fit_color=color, primary_reason=reason, tax_efficiency_rating=tax_eff
+        )
+
+
+# -------------------- 6. TRADE-OFF COMPARATOR --------------------
+@dataclass
+class TradeOffRow:
+    asset_name: str
+    category_group: str
+    nominal_return_pct: float
+    post_tax_yield_pct: float
+    net_maturity_value: float
+    real_inflation_adjusted_yield_pct: float
+    downside_risk_rating: str
+    liquidity_rating: str
+    tax_efficiency_grade: str
+    what_you_gain: str
+    what_you_sacrifice: str
+    horizon_fit_note: str
+
+
+class TradeOffComparator:
+    @classmethod
+    def compare_all(cls, amount: float = 200000.0, tenure_months: int = 36, tax_bracket_pct: float = 30.0, expected_inflation_pct: float = 6.0) -> List[TradeOffRow]:
+        t_years = tenure_months / 12.0
+        results: List[TradeOffRow] = []
+
+        # 1. Bank FD
+        fd_res = FixedDepositCalculator.calculate(FDParameters(principal=amount, tenure_months=tenure_months, interest_rate_pct=7.0 if t_years >= 3.0 else 6.8, tax_bracket_pct=tax_bracket_pct, expected_inflation_pct=expected_inflation_pct))
+        results.append(TradeOffRow(
+            asset_name="Bank Fixed Deposit (HDFC/SBI)", category_group="Fixed Income",
+            nominal_return_pct=fd_res.effective_annual_yield_pct, post_tax_yield_pct=fd_res.net_post_tax_annual_yield_pct,
+            net_maturity_value=fd_res.net_maturity_amount, real_inflation_adjusted_yield_pct=fd_res.real_inflation_adjusted_yield_pct,
+            downside_risk_rating="Negligible (DICGC ₹5L cover)", liquidity_rating="Penalty Exit (0.5-1% cut)", tax_efficiency_grade="C (Slab Taxed)",
+            what_you_gain="Guaranteed nominal capital preservation and quarterly compounding.",
+            what_you_sacrifice="Purchasing power to inflation; heavy tax drag at 20-30% brackets.",
+            horizon_fit_note="Excellent for 6 to 24 months; poor for > 5 years."
+        ))
+
+        # 2. Arbitrage Fund
+        arb_res = MutualFundAnalyzer.analyze(MutualFundParameters(investment_mode="lumpsum", investment_amount=amount, tenure_years=t_years, category="arbitrage", expected_cagr_pct=7.2, direct_expense_ratio_pct=0.30, tax_bracket_pct=tax_bracket_pct, expected_inflation_pct=expected_inflation_pct))
+        results.append(TradeOffRow(
+            asset_name="Arbitrage Mutual Fund (Direct)", category_group="Cash Equivalent",
+            nominal_return_pct=6.90, post_tax_yield_pct=arb_res.net_cagr_post_tax_pct,
+            net_maturity_value=arb_res.net_post_tax_corpus, real_inflation_adjusted_yield_pct=arb_res.real_inflation_adjusted_cagr_pct,
+            downside_risk_rating="Very Low (Hedging spreads)", liquidity_rating="Instant (T+1 days, no penalty)", tax_efficiency_grade="B (Equity Tax: 12.5% LTCG)",
+            what_you_gain="FD-like low volatility with superior equity taxation (12.5% vs 30% slab).",
+            what_you_sacrifice="Returns capped to money-market spreads; zero long-term growth.",
+            horizon_fit_note="Ideal replacement for FDs for 6-36 months in high tax brackets."
+        ))
+
+        # 3. G-Sec 10-Yr Benchmark
+        bond_res = BondEngine.analyze(BondParameters(face_value=amount, market_price=amount, coupon_rate_pct=7.10, tenure_years=t_years, coupon_frequency=2, credit_rating="SOVEREIGN", tax_bracket_pct=tax_bracket_pct, expected_inflation_pct=expected_inflation_pct))
+        results.append(TradeOffRow(
+            asset_name="Government Security (G-Sec 7.10% RBI)", category_group="Fixed Income",
+            nominal_return_pct=bond_res.ytm_pct, post_tax_yield_pct=bond_res.net_post_tax_ytm_pct,
+            net_maturity_value=amount * math.pow(1.0 + (bond_res.net_post_tax_ytm_pct / 100.0), t_years), real_inflation_adjusted_yield_pct=bond_res.real_inflation_adjusted_ytm_pct,
+            downside_risk_rating="Low (Zero default, rate risk)", liquidity_rating="Moderate (NDS-OM secondary market)", tax_efficiency_grade="C (Coupons Slab Taxed)",
+            what_you_gain="100% sovereign protection with zero credit risk, locking in yields.",
+            what_you_sacrifice="Bond price fluctuates if interest rates rise (Duration risk).",
+            horizon_fit_note="Best held to maturity (3 to 10 years)."
+        ))
+
+        # 4. SGB
+        gold_res = GoldEngine.compare(GoldInvestmentParameters(investment_amount=amount, tenure_years=min(max(t_years, 1.0), 8.0), expected_gold_cagr_pct=8.5, tax_bracket_pct=tax_bracket_pct, sgb_coupon_rate_pct=2.50))
+        results.append(TradeOffRow(
+            asset_name="Sovereign Gold Bond (SGB)", category_group="Commodity / Gold",
+            nominal_return_pct=11.0, post_tax_yield_pct=gold_res.sgb_net_cagr_pct,
+            net_maturity_value=gold_res.sgb_total_payout, real_inflation_adjusted_yield_pct=round(((1.0 + gold_res.sgb_net_cagr_pct / 100.0) / (1.0 + expected_inflation_pct / 100.0) - 1.0) * 100.0, 2),
+            downside_risk_rating="Moderate (Gold price cycle)", liquidity_rating="Locked (RBI window Y5 / Illiquid secondary)", tax_efficiency_grade="A (100% Tax Free Capital Gains)",
+            what_you_gain="Gold price appreciation + 2.5% p.a. sovereign coupon + 100% tax-free gains.",
+            what_you_sacrifice="Immediate liquidity (8-year tenure; RBI buyback begins at year 5).",
+            horizon_fit_note="Unmatched wealth builder for 5 to 8-year horizons."
+        ))
+
+        # 5. Equity Flexi Cap Fund
+        mf_res = MutualFundAnalyzer.analyze(MutualFundParameters(investment_mode="lumpsum", investment_amount=amount, tenure_years=t_years, category="flexi_cap", expected_cagr_pct=13.0, direct_expense_ratio_pct=0.60, tax_bracket_pct=tax_bracket_pct, expected_inflation_pct=expected_inflation_pct))
+        results.append(TradeOffRow(
+            asset_name="Equity Flexi Cap Mutual Fund (Direct)", category_group="Equity",
+            nominal_return_pct=12.40, post_tax_yield_pct=mf_res.net_cagr_post_tax_pct,
+            net_maturity_value=mf_res.net_post_tax_corpus, real_inflation_adjusted_yield_pct=mf_res.real_inflation_adjusted_cagr_pct,
+            downside_risk_rating="High (Market cycle swings)", liquidity_rating="Instant (T+2 days, 1% exit load Y1)", tax_efficiency_grade="B (12.5% LTCG > ₹1.25L)",
+            what_you_gain="Powerful long-term wealth compounding beating inflation comfortably.",
+            what_you_sacrifice="Short-term capital certainty; subject to 20-40% market drawdowns.",
+            horizon_fit_note="Requires minimum 5+ years to eliminate negative return probability."
+        ))
+
+        # 6. Direct Equity (DCF Screened)
+        gross_stock_cagr = 14.50
+        stock_corpus_gross = amount * math.pow(1.0 + (gross_stock_cagr / 100.0), t_years)
+        stock_gains = max(0.0, stock_corpus_gross - amount)
+        stock_tax = max(0.0, stock_gains - 125000.0) * 0.125 if t_years >= 1.0 else stock_gains * 0.20
+        stock_net_corpus = stock_corpus_gross - stock_tax
+        stock_net_cagr = (math.pow(stock_net_corpus / amount, 1.0 / t_years) - 1.0) * 100.0
+        stock_real_cagr = ((1.0 + stock_net_cagr / 100.0) / (1.0 + expected_inflation_pct / 100.0) - 1.0) * 100.0
+
+        results.append(TradeOffRow(
+            asset_name="Direct Listed Equity (DCF Screened)", category_group="Equity",
+            nominal_return_pct=gross_stock_cagr, post_tax_yield_pct=round(stock_net_cagr, 2),
+            net_maturity_value=round(stock_net_corpus, 2), real_inflation_adjusted_yield_pct=round(stock_real_cagr, 2),
+            downside_risk_rating="Very High (Company specific risk)", liquidity_rating="Instant (T+1 market settlement)", tax_efficiency_grade="B (12.5% LTCG)",
+            what_you_gain="Maximum upside potential through business ownership and valuation mispricings.",
+            what_you_sacrifice="Portfolio diversification; individual stock earnings vulnerability.",
+            horizon_fit_note="Strictly for 5+ years and risk-tolerant investors who understand business metrics."
+        ))
+
+        return results
+
+    @classmethod
+    def to_dataframe(cls, trade_offs: List[TradeOffRow]) -> pd.DataFrame:
+        data = []
+        for row in trade_offs:
+            data.append({
+                "Asset / Product": row.asset_name,
+                "Category": row.category_group,
+                "Nominal Return (%)": f"{row.nominal_return_pct:.2f}%",
+                "Post-Tax Net Yield (%)": f"{row.post_tax_yield_pct:.2f}%",
+                "Net Maturity (₹)": f"₹{row.net_maturity_value:,.0f}",
+                "Real Yield (vs 6% CPI)": f"{row.real_inflation_adjusted_yield_pct:+.2f}%",
+                "Downside Risk": row.downside_risk_rating,
+                "Liquidity": row.liquidity_rating,
+                "Tax Efficiency": row.tax_efficiency_grade,
+                "What You Gain": row.what_you_gain,
+                "What You Sacrifice": row.what_you_sacrifice
+            })
+        return pd.DataFrame(data)
+
+
+# -----------------------------------------------------------------------------
+# PAGE CONFIGURATION
+# -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Kavach Financial | Multi-Asset Capital Allocator",
     page_icon="🛡️",
@@ -95,7 +813,6 @@ st.markdown("""
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
-    /* Adjusted top padding to completely clear Streamlit's floating header menu */
     .block-container {
         padding-top: 3.8rem;
         padding-bottom: 2rem;
@@ -104,7 +821,6 @@ st.markdown("""
         max-width: 1480px;
     }
 
-    /* Live Top Index Ticker Strip */
     .market-ticker-bar {
         display: flex;
         align-items: center;
@@ -147,7 +863,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Hero Banners */
     .home-hero-card {
         background: #161b22;
         border: 1px solid #30363d;
@@ -169,22 +884,12 @@ st.markdown("""
         line-height: 1.5;
     }
 
-    /* Allocator & Suitability Cards */
     .allocator-card {
         background: #161b22;
         border: 1px solid #30363d;
         border-radius: 8px;
         padding: 18px 20px;
         margin-bottom: 16px;
-    }
-    .allocator-card-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #f0f6fc;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
     }
 
     .warning-box {
@@ -233,7 +938,6 @@ st.markdown("""
         border-radius: 4px;
     }
 
-    /* Trade-Off Visuals */
     .gain-pill {
         background: rgba(63, 185, 80, 0.15);
         color: #3fb950;
@@ -251,7 +955,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Trending & Generic Cards */
     .trending-card {
         background: #161b22;
         border: 1px solid #30363d;
@@ -295,7 +998,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
 
-    /* Google Finance Style Header */
     .gf-header {
         border-bottom: 1px solid #21262d;
         padding-bottom: 12px;
@@ -345,7 +1047,6 @@ st.markdown("""
         color: #8b949e;
     }
 
-    /* Quick stats cell */
     .stat-cell {
         background: #161b22;
         border: 1px solid #30363d;
@@ -366,7 +1067,6 @@ st.markdown("""
         color: #f0f6fc;
     }
 
-    /* Verdict Boxes */
     .verdict-box-buy {
         background: rgba(63, 185, 80, 0.12);
         border: 1.5px solid #3fb950;
@@ -836,7 +1536,7 @@ if st.session_state['nav_mode'] == "🎯 Capital Allocator & Trade-Off Matrix":
     df_tradeoff = TradeOffComparator.to_dataframe(trade_offs)
     st.dataframe(df_tradeoff, use_container_width=True, hide_index=True)
 
-    # Interactive Visualizations: Post-Tax Net Yield vs Inflation & Risk-Return Scatter
+    # Interactive Visualizations
     v_col1, v_col2 = st.columns(2)
     with v_col1:
         st.markdown("##### Net Post-Tax Yield vs Inflation Benchmark")
@@ -961,7 +1661,6 @@ elif st.session_state['nav_mode'] == "📊 Multi-Asset Product Deep Dives":
             institution_type=inst_type
         ))
 
-        # FD Metric Strip
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.markdown(f"""<div class="stat-cell"><div class="stat-label">Gross Maturity Amount</div><div class="stat-val">₹{fd_res.gross_maturity_amount:,.0f}</div><div style="font-size:0.75rem; color:#8b949e;">Interest: ₹{fd_res.gross_interest_earned:,.0f}</div></div>""", unsafe_allow_html=True)
@@ -1007,7 +1706,6 @@ elif st.session_state['nav_mode'] == "📊 Multi-Asset Product Deep Dives":
             tax_bracket_pct=mf_tax_bracket
         ))
 
-        # MF Wealth Stats
         w1, w2, w3, w4 = st.columns(4)
         with w1:
             st.markdown(f"""<div class="stat-cell"><div class="stat-label">Total Invested Capital</div><div class="stat-val">₹{mf_res.total_invested_capital:,.0f}</div><div style="font-size:0.75rem; color:#8b949e;">{mf_mode} over {mf_years} yrs</div></div>""", unsafe_allow_html=True)
@@ -1021,7 +1719,6 @@ elif st.session_state['nav_mode'] == "📊 Multi-Asset Product Deep Dives":
         st.caption(f"⚖️ **Budget 2024 Tax Treatment**: {mf_res.tax_treatment_summary}")
         st.caption(f"🎯 **Suitability Diagnostic**: {mf_res.suitability_verdict}")
 
-        # Chart: Direct Plan vs Regular Plan Wealth Trajectory
         df_mf_sched = pd.DataFrame(mf_res.wealth_growth_schedule)
         fig_mf = go.Figure()
         fig_mf.add_trace(go.Scatter(x=df_mf_sched['year'], y=df_mf_sched['direct_corpus'], mode='lines+markers', name='Direct Plan (Zero Commission)', line=dict(color='#38bdf8', width=3)))
@@ -1061,7 +1758,6 @@ elif st.session_state['nav_mode'] == "📊 Multi-Asset Product Deep Dives":
         for takeaway in gold_res.key_takeaways:
             st.caption(f"📌 {takeaway}")
 
-        # Gold comparison growth chart
         df_gold_sched = pd.DataFrame(gold_res.cash_flow_schedule)
         fig_gold = go.Figure()
         fig_gold.add_trace(go.Scatter(x=df_gold_sched['year'], y=df_gold_sched['sgb_cumulative_value'], mode='lines+markers', name='SGB (Price + 2.5% Coupon + Tax Free)', line=dict(color='#fbbf24', width=3)))
@@ -1156,7 +1852,6 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
     prov = raw_data.get('provenance', {})
     sector = raw_data.get('sector', 'Corporate')
 
-    # Add to recent searches
     curr_entry = (company_name, active_url)
     if curr_entry in st.session_state['recent_searches']:
         st.session_state['recent_searches'].remove(curr_entry)
@@ -1174,16 +1869,13 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
     fair_upside = val_results['fair_value_summary']['blended_upside_pct']
     wacc_pct = val_results['wacc_parameters']['wacc_pct']
 
-    # Fetch Real-time News & Sentiment Catalysts
     articles, catalyst_impact = fetch_news_and_catalysts(company_name, ticker, fair_target, wacc_pct)
 
-    # External Financial Hub Links
     tv_link = f"https://in.tradingview.com/symbols/NSE-{ticker}/"
     gf_link = f"https://www.google.com/finance/quote/{ticker}:NSE"
     mc_link = f"https://www.moneycontrol.com/india/stockpricequote/"
     bse_link = f"https://www.bseindia.com/corporates/ann.html"
 
-    # Google Finance Style Company Header
     daily_change_pct = catalyst_impact.get('catalyst_score', 0.0) * 0.05
     daily_change_val = cmp * (daily_change_pct / 100.0)
     chg_dir_cls = "gf-change-down" if daily_change_pct < 0 else "gf-change-up"
@@ -1209,7 +1901,6 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
     </div>
     """, unsafe_allow_html=True)
 
-    # Key Stats Strip
     stats_cols = st.columns(8)
     with stats_cols[0]:
         st.markdown(f"""<div class="stat-cell"><div class="stat-label">Market Cap</div><div class="stat-val">₹{mcap:,.0f} Cr</div></div>""", unsafe_allow_html=True)
@@ -1229,7 +1920,6 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
         margin_tag_color = "#3fb950" if fair_upside >= 0 else "#f85149"
         st.markdown(f"""<div class="stat-cell"><div class="stat-label">Margin of Safety</div><div class="stat-val" style="color:{margin_tag_color};">{fair_upside:+.1f}%</div></div>""", unsafe_allow_html=True)
 
-    # Google Finance Style Area Chart & Financial Q&A Assistant
     gf_chart_col, gf_research_col = st.columns([2.3, 1.1])
     with gf_chart_col:
         tf_col1, tf_col2 = st.columns([3, 1])
@@ -1332,7 +2022,6 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
                 for b in catalyst_impact.get('summary_bullets', []):
                     st.markdown(f"- {b}")
 
-    # Screener-Style Dual-Axis Valuation Multiples Chart
     st.markdown("---")
     st.markdown("##### 📊 Historical Valuation Multiples & Capital Metrics (Screener.in Style)")
 
@@ -1392,7 +2081,6 @@ elif st.session_state['nav_mode'] == "🏢 Company DCF Model & Screener":
     apply_market_theme(fig_screener, height=360, show_legend=True)
     st.plotly_chart(fig_screener, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    # Beginner vs Pro Mode Switcher
     st.markdown("---")
     view_mode = st.radio(
         "Choose Analysis Depth",
@@ -1560,7 +2248,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Recently Viewed Stocks Bar
     st.markdown("##### 🕒 Recently Viewed Stocks")
     rec_cols = st.columns(len(st.session_state['recent_searches']) + 1)
     for idx, (rec_name, rec_url) in enumerate(st.session_state['recent_searches']):
@@ -1572,7 +2259,6 @@ else:
 
     st.markdown("---")
 
-    # Trending Companies Grid
     st.markdown("##### 🔥 Trending Market Leaders & Bluechips")
     st.caption("Explore high-activity Indian market giants. Click any company card to launch full institutional DCF valuation, news catalysts, and traffic light scorecards.")
 
@@ -1603,7 +2289,6 @@ else:
 
     st.markdown("---")
 
-    # Budget 2024 Tax Law Reference Summary Card
     st.markdown("##### 📜 Indian Capital Gains & Taxation Reference (Finance Act 2024)")
     t_c1, t_c2, t_c3 = st.columns(3)
     with t_c1:
