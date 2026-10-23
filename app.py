@@ -34,7 +34,7 @@ import plotly.express as px
 try:
     from screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
-        ScreenerAccessError, InsufficientDataError
+        ScreenerAccessError, InsufficientDataError, clean_number
     )
     from forecasting_engine import (
         FinancialStatementForecaster, ForecastingError, InsufficientHistoryError
@@ -45,7 +45,7 @@ try:
 except ImportError:
     from src.scraper.screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
-        ScreenerAccessError, InsufficientDataError
+        ScreenerAccessError, InsufficientDataError, clean_number
     )
     from src.prediction.forecasting_engine import (
         FinancialStatementForecaster, ForecastingError, InsufficientHistoryError
@@ -521,23 +521,11 @@ ticker_spans = []
 for name, price, chg, pct, direction in indices_data:
     arrow = "▼" if direction == "down" else "▲"
     chg_cls = "ticker-down" if direction == "down" else "ticker-up"
-    ticker_spans.append(f"""
-        <div class="ticker-item">
-            <span class="ticker-name">{name}</span>
-            <span>{price}</span>
-            <span class="{chg_cls}">{chg} {pct} {arrow}</span>
-        </div>
-    """)
+    ticker_spans.append(f'<div class="ticker-item"><span class="ticker-name">{name}</span><span>{price}</span><span class="{chg_cls}">{chg} {pct} {arrow}</span></div>')
 
 ticker_inner_html = "".join(ticker_spans)
-st.markdown(f"""
-<div class="market-ticker-bar">
-    <span class="ticker-close-tag">Market {indices_data[0][4].capitalize()}</span>
-    <span style="color:#8b949e; font-weight:500;">{curr_date_str}</span>
-    <span style="color:#30363d;">|</span>
-    {ticker_inner_html}
-</div>
-""", unsafe_allow_html=True)
+ticker_bar_html = f'<div class="market-ticker-bar"><span class="ticker-close-tag">Market {indices_data[0][4].capitalize()}</span><span style="color:#8b949e; font-weight:500;">{curr_date_str}</span><span style="color:#30363d;">|</span>{ticker_inner_html}</div>'
+st.markdown(ticker_bar_html, unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
