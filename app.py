@@ -4,7 +4,14 @@ Built with Streamlit, Plotly, and OpenPyXL.
 """
 
 import os
+import sys
 import io
+
+# Ensure current application directory is prioritized in sys.path for Streamlit Cloud
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,16 +19,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 try:
-    from src.scraper.screener_scraper import (
-        ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
-        ScreenerAccessError, InsufficientDataError
-    )
-    from src.prediction.forecasting_engine import (
-        FinancialStatementForecaster, ForecastingError, InsufficientHistoryError
-    )
-    from src.valuation.dcf_model import DCFValuationEngine, ValuationValidationError
-    from src.excel.workbook_builder import WorkbookBuilder
-except ImportError:
     from screener_scraper import (
         ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
         ScreenerAccessError, InsufficientDataError
@@ -31,6 +28,16 @@ except ImportError:
     )
     from dcf_model import DCFValuationEngine, ValuationValidationError
     from workbook_builder import WorkbookBuilder
+except ImportError:
+    from src.scraper.screener_scraper import (
+        ScreenerScraper, ScreenerScraperError, InvalidURLError, CompanyNotFoundError,
+        ScreenerAccessError, InsufficientDataError
+    )
+    from src.prediction.forecasting_engine import (
+        FinancialStatementForecaster, ForecastingError, InsufficientHistoryError
+    )
+    from src.valuation.dcf_model import DCFValuationEngine, ValuationValidationError
+    from src.excel.workbook_builder import WorkbookBuilder
 
 # Page configuration
 st.set_page_config(
