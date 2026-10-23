@@ -1,8 +1,8 @@
 """
 Financial Model & DCF Valuation Screener
 Professional TradingView & Bloomberg-inspired dark terminal interface
-Enhanced with Live Company Autocomplete, Multi-Source Market Links,
-and Real-Time News Catalyst Sentiment & Predictive Valuation Modeling.
+Featuring Real-time Keystroke Search, Beginner-Friendly Investment Verdicts,
+Jargon Busters, Multi-Source Market Hub, and Real-Time News Sentiment Modeling.
 """
 
 import os
@@ -64,25 +64,23 @@ st.markdown("""
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
-    /* Global container padding */
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1.0rem;
         padding-bottom: 2rem;
         padding-left: 2rem;
         padding-right: 2rem;
         max-width: 1440px;
     }
 
-    /* Terminal header bar */
     .terminal-header {
         border-bottom: 1px solid #21262d;
         padding-bottom: 0.8rem;
-        margin-bottom: 1.2rem;
+        margin-bottom: 1.0rem;
     }
     .company-title-row {
         display: flex;
         align-items: baseline;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
     }
     .company-name {
@@ -127,48 +125,66 @@ st.markdown("""
     .company-meta {
         font-size: 0.8rem;
         color: #8b949e;
-        margin-top: 6px;
+        margin-top: 5px;
     }
 
-    /* KPI metric strip */
-    .metric-strip {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-        gap: 10px;
+    /* Beginner verdict cards */
+    .verdict-box-buy {
+        background: rgba(63, 185, 80, 0.12);
+        border: 1.5px solid #3fb950;
+        border-radius: 8px;
+        padding: 18px 20px;
         margin-bottom: 1.2rem;
     }
-    .metric-cell {
-        background-color: #161b22;
+    .verdict-box-hold {
+        background: rgba(210, 153, 34, 0.12);
+        border: 1.5px solid #d29922;
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin-bottom: 1.2rem;
+    }
+    .verdict-box-sell {
+        background: rgba(248, 81, 73, 0.12);
+        border: 1.5px solid #f85149;
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin-bottom: 1.2rem;
+    }
+    .verdict-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+    .verdict-desc {
+        font-size: 0.95rem;
+        color: #c9d1d9;
+        line-height: 1.5;
+    }
+
+    /* Scorecard cells */
+    .score-cell {
+        background: #161b22;
         border: 1px solid #30363d;
         border-radius: 6px;
-        padding: 10px 14px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
     }
-    .metric-label {
-        font-size: 0.72rem;
+    .score-title {
+        font-size: 0.78rem;
         color: #8b949e;
         text-transform: uppercase;
+        font-weight: 600;
         letter-spacing: 0.04em;
-        font-weight: 500;
-        margin-bottom: 4px;
     }
-    .metric-value {
-        font-size: 1.15rem;
+    .score-val {
+        font-size: 1.1rem;
         font-weight: 700;
         color: #f0f6fc;
-        line-height: 1.2;
+        margin-top: 3px;
     }
-    .metric-badge-pos {
-        display: inline-block;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #3fb950;
-        margin-top: 2px;
-    }
-    .metric-badge-neg {
-        display: inline-block;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #f85149;
+    .score-sub {
+        font-size: 0.8rem;
+        color: #8b949e;
         margin-top: 2px;
     }
 
@@ -179,10 +195,6 @@ st.markdown("""
         border-radius: 6px;
         padding: 14px 16px;
         margin-bottom: 12px;
-        transition: border-color 0.2s ease;
-    }
-    .news-card:hover {
-        border-color: #58a6ff;
     }
     .news-title {
         font-size: 0.95rem;
@@ -235,11 +247,7 @@ st.markdown("""
         text-decoration: none;
         font-weight: 500;
     }
-    .news-link:hover {
-        text-decoration: underline;
-    }
 
-    /* Discreet terminal disclaimer */
     .disclaimer-card {
         padding: 12px 16px;
         background: #161b22;
@@ -253,7 +261,6 @@ st.markdown("""
         border-right: 1px solid #21262d;
         border-bottom: 1px solid #21262d;
     }
-
     .sidebar-section-title {
         font-size: 0.78rem;
         font-weight: 600;
@@ -331,11 +338,90 @@ def apply_market_theme(fig, title="", height=380, show_legend=True, xaxis_title=
 
 
 # -----------------------------------------------------------------------------
-# COMPANY AUTOCOMPLETE & SEARCH API
+# PRELOADED INSTANT SEARCH CATALOG (Top 70+ Popular Indian Equities)
+# -----------------------------------------------------------------------------
+POPULAR_STOCKS = [
+    ("Tata Steel", "TATASTEEL", "https://www.screener.in/company/TATASTEEL/consolidated/"),
+    ("Tata Motors", "TATAMOTORS", "https://www.screener.in/company/TATAMOTORS/consolidated/"),
+    ("Tata Consultancy Services (TCS)", "TCS", "https://www.screener.in/company/TCS/"),
+    ("Tata Power", "TATAPOWER", "https://www.screener.in/company/TATAPOWER/consolidated/"),
+    ("Tata Consumer Products", "TATACONSUM", "https://www.screener.in/company/TATACONSUM/consolidated/"),
+    ("Reliance Industries", "RELIANCE", "https://www.screener.in/company/RELIANCE/consolidated/"),
+    ("Infosys", "INFY", "https://www.screener.in/company/INFY/consolidated/"),
+    ("Hindustan Unilever (HUL)", "HINDUNILVR", "https://www.screener.in/company/HINDUNILVR/"),
+    ("ITC", "ITC", "https://www.screener.in/company/ITC/consolidated/"),
+    ("HDFC Bank", "HDFCBANK", "https://www.screener.in/company/HDFCBANK/consolidated/"),
+    ("ICICI Bank", "ICICIBANK", "https://www.screener.in/company/ICICIBANK/consolidated/"),
+    ("State Bank of India (SBI)", "SBIN", "https://www.screener.in/company/SBIN/"),
+    ("Bharti Airtel", "BHARTIARTL", "https://www.screener.in/company/BHARTIARTL/consolidated/"),
+    ("Larsen & Toubro (L&T)", "LT", "https://www.screener.in/company/LT/consolidated/"),
+    ("Bajaj Finance", "BAJFINANCE", "https://www.screener.in/company/BAJFINANCE/consolidated/"),
+    ("Asian Paints", "ASIANPAINT", "https://www.screener.in/company/ASIANPAINT/consolidated/"),
+    ("Maruti Suzuki", "MARUTI", "https://www.screener.in/company/MARUTI/consolidated/"),
+    ("Sun Pharma", "SUNPHARMA", "https://www.screener.in/company/SUNPHARMA/consolidated/"),
+    ("Titan Company", "TITAN", "https://www.screener.in/company/TITAN/consolidated/"),
+    ("Zomato (Eternal)", "ETERNAL", "https://www.screener.in/company/ETERNAL/consolidated/"),
+    ("Adani Enterprises", "ADANIENT", "https://www.screener.in/company/ADANIENT/consolidated/"),
+    ("Adani Ports", "ADANIPORTS", "https://www.screener.in/company/ADANIPORTS/consolidated/"),
+    ("Adani Green Energy", "ADANIGREEN", "https://www.screener.in/company/ADANIGREEN/consolidated/"),
+    ("Adani Power", "ADANIPOWER", "https://www.screener.in/company/ADANIPOWER/consolidated/"),
+    ("Wipro", "WIPRO", "https://www.screener.in/company/WIPRO/consolidated/"),
+    ("HCL Technologies", "HCLTECH", "https://www.screener.in/company/HCLTECH/consolidated/"),
+    ("Tech Mahindra", "TECHM", "https://www.screener.in/company/TECHM/consolidated/"),
+    ("NTPC", "NTPC", "https://www.screener.in/company/NTPC/consolidated/"),
+    ("Power Grid Corporation", "POWERGRID", "https://www.screener.in/company/POWERGRID/consolidated/"),
+    ("ONGC", "ONGC", "https://www.screener.in/company/ONGC/consolidated/"),
+    ("Coal India", "COALINDIA", "https://www.screener.in/company/COALINDIA/consolidated/"),
+    ("Jindal Steel & Power", "JINDALSTEL", "https://www.screener.in/company/JINDALSTEL/consolidated/"),
+    ("JSW Steel", "JSWSTEEL", "https://www.screener.in/company/JSWSTEEL/consolidated/"),
+    ("Vedanta", "VEDL", "https://www.screener.in/company/VEDL/consolidated/"),
+    ("Hindalco Industries", "HINDALCO", "https://www.screener.in/company/HINDALCO/consolidated/"),
+    ("UltraTech Cement", "ULTRACEMCO", "https://www.screener.in/company/ULTRACEMCO/consolidated/"),
+    ("Grasim Industries", "GRASIM", "https://www.screener.in/company/GRASIM/consolidated/"),
+    ("Cipla", "CIPLA", "https://www.screener.in/company/CIPLA/consolidated/"),
+    ("Dr Reddys Labs", "DRREDDY", "https://www.screener.in/company/DRREDDY/consolidated/"),
+    ("Divis Laboratories", "DIVISLAB", "https://www.screener.in/company/DIVISLAB/consolidated/"),
+    ("Apollo Hospitals", "APOLLOHOSP", "https://www.screener.in/company/APOLLOHOSP/consolidated/"),
+    ("Eicher Motors", "EICHERMOT", "https://www.screener.in/company/EICHERMOT/consolidated/"),
+    ("Mahindra & Mahindra (M&M)", "M&M", "https://www.screener.in/company/M&M/consolidated/"),
+    ("Hero MotoCorp", "HEROMOTOCO", "https://www.screener.in/company/HEROMOTOCO/consolidated/"),
+    ("Bajaj Auto", "BAJAJ-AUTO", "https://www.screener.in/company/BAJAJ-AUTO/consolidated/"),
+    ("Nestle India", "NESTLEIND", "https://www.screener.in/company/NESTLEIND/"),
+    ("Britannia Industries", "BRITANNIA", "https://www.screener.in/company/BRITANNIA/consolidated/"),
+    ("Dabur India", "DABUR", "https://www.screener.in/company/DABUR/consolidated/"),
+    ("Godrej Consumer Products", "GODREJCP", "https://www.screener.in/company/GODREJCP/consolidated/"),
+    ("Marico", "MARICO", "https://www.screener.in/company/MARICO/consolidated/"),
+    ("Pidilite Industries", "PIDILITIND", "https://www.screener.in/company/PIDILITIND/consolidated/"),
+    ("Havells India", "HAVELLS", "https://www.screener.in/company/HAVELLS/consolidated/"),
+    ("Siemens India", "SIEMENS", "https://www.screener.in/company/SIEMENS/"),
+    ("ABB India", "ABB", "https://www.screener.in/company/ABB/"),
+    ("Bharat Electronics (BEL)", "BEL", "https://www.screener.in/company/BEL/consolidated/"),
+    ("Hindustan Aeronautics (HAL)", "HAL", "https://www.screener.in/company/HAL/consolidated/"),
+    ("DLF", "DLF", "https://www.screener.in/company/DLF/consolidated/"),
+    ("Trent", "TRENT", "https://www.screener.in/company/TRENT/consolidated/"),
+    ("DMart (Avenue Supermarts)", "DMART", "https://www.screener.in/company/DMART/consolidated/"),
+    ("Jio Financial Services", "JIOFIN", "https://www.screener.in/company/JIOFIN/consolidated/"),
+    ("Varun Beverages (VBL)", "VBL", "https://www.screener.in/company/VBL/consolidated/"),
+    ("Polycab India", "POLYCAB", "https://www.screener.in/company/POLYCAB/consolidated/"),
+    ("Suzlon Energy", "SUZLON", "https://www.screener.in/company/SUZLON/consolidated/"),
+    ("BHEL", "BHEL", "https://www.screener.in/company/BHEL/consolidated/"),
+    ("IRCTC", "IRCTC", "https://www.screener.in/company/IRCTC/consolidated/"),
+    ("RVNL", "RVNL", "https://www.screener.in/company/RVNL/consolidated/"),
+    ("REC Ltd", "RECLTD", "https://www.screener.in/company/RECLTD/consolidated/"),
+    ("PFC Ltd", "PFC", "https://www.screener.in/company/PFC/consolidated/"),
+    ("IOCL (Indian Oil)", "IOC", "https://www.screener.in/company/IOC/consolidated/"),
+    ("BPCL", "BPCL", "https://www.screener.in/company/BPCL/consolidated/"),
+    ("GAIL India", "GAIL", "https://www.screener.in/company/GAIL/consolidated/")
+]
+
+STOCK_MAP = {f"{name} ({ticker})": url for name, ticker, url in POPULAR_STOCKS}
+
+
+# -----------------------------------------------------------------------------
+# DYNAMIC ONLINE SEARCH API (For Any Other Listed Indian Company)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=900, show_spinner=False)
-def search_screener_companies(query: str) -> List[Dict[str, str]]:
-    """Queries Screener.in autocomplete API to return matching listed companies."""
+def search_screener_api(query: str) -> List[Dict[str, str]]:
     if not query or len(query.strip()) < 2:
         return []
     try:
@@ -343,83 +429,61 @@ def search_screener_companies(query: str) -> List[Dict[str, str]]:
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=4)
         if r.status_code == 200:
-            results = []
+            res = []
             for item in r.json():
-                c_name = item.get('name', '').strip()
                 raw_path = item.get('url', '').strip()
-                ticker_match = re.search(r'/company/([^/]+)/', raw_path)
-                ticker_str = ticker_match.group(1) if ticker_match else ""
-                full_url = f"https://www.screener.in{raw_path}"
-                results.append({
-                    'name': c_name,
-                    'ticker': ticker_str,
-                    'url': full_url,
-                    'display': f"{c_name} ({ticker_str})" if ticker_str else c_name
+                t_match = re.search(r'/company/([^/]+)/', raw_path)
+                ticker_str = t_match.group(1) if t_match else ""
+                res.append({
+                    'display': f"{item.get('name', '')} ({ticker_str})",
+                    'url': f"https://www.screener.in{raw_path}"
                 })
-            return results
+            return res
     except Exception:
         pass
     return []
 
 
 # -----------------------------------------------------------------------------
-# SIDEBAR CONTROLS (Live Autocomplete Search + Presets)
+# SIDEBAR: INSTANT KEYSTROKE AUTOCOMPLETE & ADVANCED SETTINGS
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("<div class='sidebar-section-title'>Company Search</div>", unsafe_allow_html=True)
 
-search_mode = st.sidebar.radio(
-    "Search Mode",
-    ["Type Company Name", "Quick Presets", "Custom URL"],
-    horizontal=True,
-    label_visibility="collapsed"
+# Instant searchable dropdown with 70+ preloaded popular stocks (updates on keystroke!)
+stock_choice = st.sidebar.selectbox(
+    "Type or Select Company (Instant Suggestions)",
+    options=list(STOCK_MAP.keys()),
+    index=0,
+    help="Click and start typing any letters (e.g., 'tata', 'rel', 'inf', 'zom', 'ada') to see real-time suggestions!"
 )
+active_url = STOCK_MAP[stock_choice]
 
-active_url = "https://www.screener.in/company/TATASTEEL/consolidated/"
-
-if search_mode == "Type Company Name":
-    query_text = st.sidebar.text_input(
-        "Search Company Name",
-        value=st.session_state.get("prev_query", "Tata Steel"),
-        help="Type any company name (e.g. Tata, Reliance, Infosys, Zomato, ITC, Adani)"
-    )
-    st.session_state["prev_query"] = query_text
-    matches = search_screener_companies(query_text)
+# Expander to search any of the 5,000+ unlisted or micro-cap companies
+with st.sidebar.expander("Search Other 5,000+ Indian Stocks", expanded=False):
+    custom_query = st.text_input("Enter company name or ticker", value="", placeholder="e.g. Suzlon, Kaynes...")
+    if custom_query:
+        api_results = search_screener_api(custom_query)
+        if api_results:
+            api_opts = [r['display'] for r in api_results]
+            chosen_api = st.selectbox("Search Results", options=api_opts)
+            matched_obj = next((r for r in api_results if r['display'] == chosen_api), None)
+            if matched_obj:
+                active_url = matched_obj['url']
+        else:
+            st.caption("No matching listed stocks found on Screener.")
     
-    if matches:
-        match_displays = [m['display'] for m in matches]
-        selected_disp = st.sidebar.selectbox("Matching Stocks", options=match_displays, index=0)
-        selected_match = next((m for m in matches if m['display'] == selected_disp), matches[0])
-        active_url = selected_match['url']
-    else:
-        st.sidebar.caption("No live matches found. Check spelling or try ticker symbol.")
-        active_url = "https://www.screener.in/company/TATASTEEL/consolidated/"
+    direct_link = st.text_input("Or paste direct Screener URL", value="", placeholder="https://www.screener.in/company/...")
+    if direct_link.strip():
+        active_url = direct_link.strip()
 
-elif search_mode == "Quick Presets":
-    presets = {
-        "Tata Steel (Metals)": "https://www.screener.in/company/TATASTEEL/consolidated/",
-        "Hindustan Unilever (FMCG)": "https://www.screener.in/company/HINDUNILVR/",
-        "TCS (IT Services)": "https://www.screener.in/company/TCS/",
-        "Reliance Industries (Energy)": "https://www.screener.in/company/RELIANCE/consolidated/",
-        "Larsen & Toubro (Infrastructure)": "https://www.screener.in/company/LT/consolidated/",
-        "State Bank of India (Banking)": "https://www.screener.in/company/SBIN/"
-    }
-    sel_preset = st.sidebar.selectbox("Select Preset Stock", options=list(presets.keys()), index=0)
-    active_url = presets[sel_preset]
-
-else: # Custom URL
-    active_url = st.sidebar.text_input(
-        "Direct Screener URL",
-        value="https://www.screener.in/company/TATASTEEL/consolidated/",
-        help="Paste any company URL from Screener.in"
-    )
-
-with st.sidebar.expander("Valuation Assumptions", expanded=False):
+with st.sidebar.expander("Valuation Assumptions (Pro)", expanded=False):
     rf_rate = st.slider("Risk-Free Rate (Rf)", min_value=5.0, max_value=9.0, value=7.0, step=0.1, format="%.1f%%") / 100.0
     erp = st.slider("Equity Risk Premium (ERP)", min_value=4.0, max_value=8.0, value=5.5, step=0.1, format="%.1f%%") / 100.0
     beta_val = st.slider("Beta (β)", min_value=0.4, max_value=2.0, value=1.0, step=0.05)
     term_g = st.slider("Terminal Growth Rate (g)", min_value=2.5, max_value=6.0, value=4.5, step=0.25, format="%.2f%%") / 100.0
 
-run_button = st.sidebar.button("Run Valuation", type="primary", use_container_width=True)
+st.sidebar.markdown("---")
+st.sidebar.caption("💡 **Tip**: In the top search box, simply click and type letters to filter instantly!")
 
 
 # -----------------------------------------------------------------------------
@@ -450,38 +514,16 @@ def fetch_news_and_catalysts(c_name: str, ticker_sym: str, base_target: float, w
 
 
 # -----------------------------------------------------------------------------
-# MAIN APP BODY
+# MAIN APP EXECUTION
 # -----------------------------------------------------------------------------
-if not active_url.strip():
-    st.info("Select or search for a company in the sidebar to begin analysis.")
-    st.stop()
-
-with st.spinner("Extracting audited financials, cross-referencing market data, and computing valuation..."):
+with st.spinner("Extracting company data and calculating valuation..."):
     try:
         raw_data, fc_results, val_results = fetch_and_compute(active_url, rf_rate, erp, beta_val, term_g)
-    except InvalidURLError as e:
-        st.error(f"Invalid URL: {e}")
-        st.info("Ensure the URL follows the format: `https://www.screener.in/company/<TICKER>/`.")
-        st.stop()
-    except CompanyNotFoundError as e:
-        st.error(f"Company Not Found: {e}")
-        st.info("Verify that the ticker symbol is actively listed on Screener.in.")
-        st.stop()
-    except InsufficientDataError as e:
-        st.error(f"Data Extraction Error: {e}")
-        st.stop()
-    except InsufficientHistoryError as e:
-        st.error(f"Insufficient History: {e}")
-        st.stop()
-    except ValuationValidationError as e:
-        st.error(f"Valuation Constraint Error: {e}")
-        st.warning("Terminal Growth Rate (g) must remain strictly lower than WACC.")
-        st.stop()
     except Exception as e:
-        st.error(f"Unexpected Calculation Error: {str(e)}")
+        st.error(f"Error analyzing company: {str(e)}")
+        st.info("Please select another company or verify the URL in the sidebar.")
         st.stop()
 
-# Basic Identifiers & Metrics
 company_name = raw_data.get('company_name', 'Company')
 ticker = raw_data.get('ticker', '')
 kpis = raw_data.get('kpis', {})
@@ -499,10 +541,10 @@ fair_target = val_results['fair_value_summary']['blended_target_price']
 fair_upside = val_results['fair_value_summary']['blended_upside_pct']
 wacc_pct = val_results['wacc_parameters']['wacc_pct']
 
-# Fetch Real-Time News & Catalyst Impact
+# Live News & Sentiment Catalysts
 articles, catalyst_impact = fetch_news_and_catalysts(company_name, ticker, fair_target, wacc_pct)
 
-# External Financial Hub Links (Beyond Screener)
+# External Financial Hub Links
 tv_link = f"https://in.tradingview.com/symbols/NSE-{ticker}/"
 gf_link = f"https://www.google.com/finance/quote/{ticker}:NSE"
 mc_link = f"https://www.moneycontrol.com/india/stockpricequote/"
@@ -523,681 +565,484 @@ st.markdown(f"""
         </div>
     </div>
     <div class="company-meta">
-        Primary Source: {prov.get('source_url', active_url)} &bull; Reporting: {prov.get('reporting_type', 'Audited')} &bull; Extracted: {prov.get('extracted_at_utc', 'Real-time')}
+        Primary Source: {prov.get('source_url', active_url)} &bull; Reporting Scope: {prov.get('reporting_type', 'Audited')}
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Compact KPI Strip
-upside_sign = "+" if fair_upside >= 0 else ""
-kpi_cols = st.columns(7)
-with kpi_cols[0]:
-    st.metric("CMP", f"₹{cmp:,.1f}" if cmp > 0 else "N/A")
-with kpi_cols[1]:
-    st.metric("Fair Value", f"₹{fair_target:,.1f}", delta=f"{upside_sign}{fair_upside:.1f}%")
-with kpi_cols[2]:
-    st.metric("Market Cap", f"₹{mcap:,.0f} Cr" if mcap > 0 else "N/A")
-with kpi_cols[3]:
-    st.metric("P/E Ratio", f"{kpis.get('Stock P/E', 'N/A')}")
-with kpi_cols[4]:
-    st.metric("Book Value", f"₹{kpis.get('Book Value', 'N/A')}")
-with kpi_cols[5]:
-    st.metric("ROCE", f"{kpis.get('ROCE', 'N/A')}%")
-with kpi_cols[6]:
-    st.metric("ROE", f"{kpis.get('ROE', 'N/A')}%")
-
-# Discreet Data Quality & Scope Expander
-with st.expander("Data Quality, Audit & Multi-Source Provenance", expanded=False):
-    q_c1, q_c2, q_c3 = st.columns(3)
-    q_c1.markdown(f"**Primary Statements**: [Screener.in Filings]({prov.get('source_url', active_url)})")
-    q_c1.markdown(f"**Reporting Scope**: {prov.get('reporting_type', 'Audited Consolidated')}")
-    q_c2.markdown(f"**Market News Feeds**: Google News RSS Real-time")
-    q_c2.markdown(f"**Live Charting Feed**: TradingView NSE Stream")
-    q_c3.markdown(f"**Audited Fiscal Years**: {len(prov.get('historical_years_available', []))} periods")
-    q_c3.markdown(f"**Extraction Timestamp**: {prov.get('extracted_at_utc', 'Real-time')}")
 
 # -----------------------------------------------------------------------------
-# NAVIGATION TABS (Strictly Structured)
+# BEGINNER VS. PRO ANALYST MODE SWITCHER
 # -----------------------------------------------------------------------------
-tab_overview, tab_news, tab_forecast, tab_valuation, tab_sensitivity, tab_statements, tab_excel = st.tabs([
-    "Overview",
-    "News & Catalysts",
-    "Forecast",
-    "Valuation",
-    "Sensitivity",
-    "Statements",
-    "Excel Export"
-])
+col_mode1, col_mode2 = st.columns([3, 1])
+with col_mode1:
+    view_mode = st.radio(
+        "Choose Your View Mode",
+        ["💡 Beginner Mode (Simple Verdicts, Plain English & Quick Suggestions)", "🔬 Pro Analyst Mode (Full DCF Statements, Multiples & Formulas)"],
+        horizontal=True
+    )
+
+st.markdown("---")
+
 
 # =============================================================================
-# TAB 1: OVERVIEW
+# VIEW 1: BEGINNER-FRIENDLY INVESTMENT SUITE
 # =============================================================================
-with tab_overview:
-    # 1. High-Contrast Valuation Targets vs CMP Visual
-    methods = ["Exit Multiple Method", "Gordon Growth Method", "Blended Fair Value"]
-    targets = [m_target, g_target, fair_target]
-    upsides = [m_upside, g_upside, fair_upside]
-    bar_colors = ["#38bdf8", "#34d399", "#818cf8"]
+if "Beginner" in view_mode:
+    # 1. Plain-English Bottom-Line Investment Verdict
+    diff_val = fair_target - cmp
+    diff_pct = ((fair_target / max(1.0, cmp)) - 1.0) * 100.0
 
-    fig_val_comp = go.Figure()
-    fig_val_comp.add_trace(go.Bar(
-        y=methods,
-        x=targets,
-        orientation="h",
-        marker=dict(color=bar_colors, line=dict(color="#1e222d", width=1.5)),
-        text=[f"₹{t:,.1f} ({'+' if u >= 0 else ''}{u:.1f}%)" for t, u in zip(targets, upsides)],
-        textposition="inside",
-        insidetextanchor="middle",
-        textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
-        hovertemplate="<b>%{y}</b><br>Target Price: ₹%{x:,.1f}<extra></extra>"
-    ))
-
-    # Benchmark reference line for CMP
-    if cmp > 0:
-        fig_val_comp.add_vline(
-            x=cmp,
-            line_width=2.5,
-            line_dash="dash",
-            line_color="#f43f5e",
-            annotation_text=f"CMP: ₹{cmp:,.1f}",
-            annotation_position="top right",
-            annotation_font=dict(color="#f43f5e", size=12, family="Inter, sans-serif")
+    if diff_pct >= 15.0:
+        box_class = "verdict-box-buy"
+        verdict_badge = "🟢 UNDERVALUED (Attractive Margin of Safety)"
+        verdict_action = "Good Buying Opportunity"
+        verdict_color = "#3fb950"
+        plain_summary = (
+            f"If you buy 1 share today at **₹{cmp:,.1f}**, our valuation models estimate the genuine business cash flow is worth **₹{fair_target:,.1f}**. "
+            f"You are getting an estimated **{diff_pct:.1f}% discount (Margin of Safety)**. In simple terms: the stock is currently on sale relative to its business earning power."
+        )
+    elif diff_pct >= -5.0:
+        box_class = "verdict-box-hold"
+        verdict_badge = "🟡 FAIRLY VALUED (Fair Market Price)"
+        verdict_action = "Hold / Accumulate on Dips"
+        verdict_color = "#d29922"
+        plain_summary = (
+            f"The stock is trading at **₹{cmp:,.1f}**, which is very close to its estimated true fair value of **₹{fair_target:,.1f}** ({diff_pct:+.1f}%). "
+            f"It is neither extremely cheap nor dangerously overpriced. Existing investors can hold, and new buyers should consider waiting for minor market corrections."
+        )
+    else:
+        box_class = "verdict-box-sell"
+        verdict_badge = "🔴 OVERVALUED (Priced at a Premium)"
+        verdict_action = "Wait for Correction / Avoid FOMO"
+        verdict_color = "#f85149"
+        plain_summary = (
+            f"The stock price of **₹{cmp:,.1f}** is trading above our estimated fair business value of **₹{fair_target:,.1f}** ({diff_pct:.1f}% premium). "
+            f"Investors have priced in heavy future growth expectations. There is a higher risk of price drop if future earnings fall short of expectations."
         )
 
-    apply_market_theme(
-        fig_val_comp,
-        title="DCF Target Price Comparison vs. Current Market Price (CMP)",
-        height=260,
-        show_legend=False,
-        xaxis_title="Price Per Share (₹)"
-    )
-    st.plotly_chart(fig_val_comp, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+    st.markdown(f"""
+    <div class="{box_class}">
+        <div class="verdict-title" style="color: {verdict_color};">{verdict_badge} &bull; Suggested Action: {verdict_action}</div>
+        <div class="verdict-desc">{plain_summary}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Valuation & Key Decision Highlights
-    col_ov1, col_ov2 = st.columns(2)
-    with col_ov1:
-        st.markdown("##### Valuation Takeaways")
-        diff_val = fair_target - cmp
-        status_text = "Undervalued (Favorable Entry)" if diff_val > 0 else "Overvalued (Premium Multiple)"
-        summary_df = pd.DataFrame([
-            {"Parameter": "Valuation Assessment", "Value": status_text},
-            {"Parameter": "Blended Fair Value", "Value": f"₹{fair_target:,.1f}"},
-            {"Parameter": "Implied Margin of Safety", "Value": f"{fair_upside:+.1f}%"},
-            {"Parameter": "Gordon Growth Target (Perpetual)", "Value": f"₹{g_target:,.1f} ({g_upside:+.1f}%)"},
-            {"Parameter": "Exit Multiple Target (EV/EBITDA)", "Value": f"₹{m_target:,.1f} ({m_upside:+.1f}%)"},
-            {"Parameter": "Cost of Capital (WACC)", "Value": f"{wacc_pct:.2f}%"},
-            {"Parameter": "Perpetual Terminal Growth (g)", "Value": f"{term_g*100:.2f}%"}
-        ])
-        st.dataframe(summary_df, hide_index=True, use_container_width=True)
+    # 2. Beginner Traffic Light Scorecard (4 Core Pillars)
+    st.markdown("##### 🚦 Beginner's 4-Pillar Health Scorecard")
+    st.write("Before investing, check these 4 simple traffic lights to see if the stock meets the basic rules of sound investing:")
 
-    with col_ov2:
-        st.markdown("##### Operating Profile & Drivers")
-        backtest = fc_results['backtest']
-        best_model = backtest.get('best_model', 'Auto-Regressive')
-        best_eval = backtest['model_evaluations'].get(best_model, {})
-        mape_val = best_eval.get('mape', 'N/A')
-        
-        pl_df = raw_data['profit_loss']
-        hist_years = fc_results['historical_years']
-        sales_hist_row = pl_df.loc['Sales'] if 'Sales' in pl_df.index else pd.Series()
-        sales_start = float(sales_hist_row.get(hist_years[0], 0.0))
-        sales_end = float(sales_hist_row.get(hist_years[-1], 0.0))
-        cagr_hist = ((sales_end / sales_start) ** (1.0 / max(1, len(hist_years) - 1)) - 1.0) * 100 if sales_start > 0 else 0.0
+    sc_cols = st.columns(4)
+    # Pillar 1: Valuation
+    with sc_cols[0]:
+        val_status = "Discount Available" if diff_pct > 10 else ("Fairly Priced" if diff_pct >= -10 else "Expensive")
+        val_icon = "🟢" if diff_pct > 10 else ("🟡" if diff_pct >= -10 else "🔴")
+        st.markdown(f"""
+        <div class="score-cell">
+            <div class="score-title">1. Valuation Check</div>
+            <div class="score-val">{val_icon} {val_status}</div>
+            <div class="score-sub">Fair Value: ₹{fair_target:,.1f} vs CMP: ₹{cmp:,.1f}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        sales_fc = fc_results['forecast_statements']['sales']
-        cagr_fc = ((sales_fc[-1] / sales_end) ** (1.0 / len(sales_fc)) - 1.0) * 100 if sales_end > 0 else 0.0
+    # Pillar 2: Profitability & Returns (ROCE)
+    roce_num = float(str(kpis.get('ROCE', '0')).replace('%', '') or 0)
+    with sc_cols[1]:
+        roce_status = "High Quality (>15%)" if roce_num >= 15 else ("Moderate (10-15%)" if roce_num >= 10 else "Low Return (<10%)")
+        roce_icon = "🟢" if roce_num >= 15 else ("🟡" if roce_num >= 10 else "🔴")
+        st.markdown(f"""
+        <div class="score-cell">
+            <div class="score-title">2. Business Quality (ROCE)</div>
+            <div class="score-val">{roce_icon} {roce_num:.1f}%</div>
+            <div class="score-sub">{roce_status} on invested money</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        driver_df = pd.DataFrame([
-            {"Metric": "Optimal Forecasting Engine", "Value": f"{best_model}"},
-            {"Metric": "Out-of-Sample Backtest MAPE", "Value": f"{mape_val}%"},
-            {"Metric": "Historical Revenue CAGR", "Value": f"{cagr_hist:.1f}% ({len(hist_years)} Periods)"},
-            {"Metric": "Projected 5-Yr Revenue CAGR", "Value": f"{cagr_fc:.1f}%"},
-            {"Metric": "Audited Fiscal Periods Analyzed", "Value": f"{hist_years[0]} to {hist_years[-1]}"},
-            {"Metric": "Forecast Horizon", "Value": f"{fc_results['future_years'][0]} to {fc_results['future_years'][-1]}"},
-            {"Metric": "Discounting Framework", "Value": "Mid-Year Convention (t - 0.5)"}
-        ])
-        st.dataframe(driver_df, hide_index=True, use_container_width=True)
+    # Pillar 3: Debt & Financial Safety
+    debt_val = float(val_results['valuation_bridge']['total_debt_cr'])
+    with sc_cols[2]:
+        debt_ratio = (debt_val / max(1.0, mcap)) * 100.0
+        debt_status = "Virtually Debt-Free" if debt_ratio < 15 else ("Moderate Debt" if debt_ratio < 50 else "High Borrowings")
+        debt_icon = "🟢" if debt_ratio < 15 else ("🟡" if debt_ratio < 50 else "🔴")
+        st.markdown(f"""
+        <div class="score-cell">
+            <div class="score-title">3. Debt & Loan Safety</div>
+            <div class="score-val">{debt_icon} {debt_status}</div>
+            <div class="score-sub">Total Debt: ₹{debt_val:,.0f} Cr ({debt_ratio:.0f}% of Mcap)</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-
-# =============================================================================
-# TAB 2: NEWS & MARKET CATALYSTS (NEW CAPABILITY)
-# =============================================================================
-with tab_news:
-    st.markdown("##### Real-Time News Catalysts & Market Impact Model")
-    st.write("Extracts live financial headlines across major financial portals, evaluates sentiment scores, and quantifies the predicted valuation impact on revenue growth, cost of capital, and target price.")
-
-    # Catalyst Scorecard Strip
+    # Pillar 4: Live Market & News Sentiment
     cat_score = catalyst_impact['catalyst_score']
-    bias_desc = catalyst_impact['sentiment_bias']
-    adj_target = catalyst_impact['sentiment_adjusted_target']
-    price_impact = catalyst_impact['price_impact_pct']
-    rev_impact = catalyst_impact['revenue_growth_impact_pct']
-    wacc_adj = catalyst_impact['wacc_impact_bps']
+    with sc_cols[3]:
+        news_status = "Positive Tailwinds" if cat_score > 10 else ("Negative Headwinds" if cat_score < -10 else "Neutral News")
+        news_icon = "🟢" if cat_score > 10 else ("🔴" if cat_score < -10 else "🟡")
+        st.markdown(f"""
+        <div class="score-cell">
+            <div class="score-title">4. Market News Sentiment</div>
+            <div class="score-val">{news_icon} {news_status}</div>
+            <div class="score-sub">Score: {cat_score:+.0f}% across recent headlines</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    col_cat1, col_cat2, col_cat3, col_cat4 = st.columns(4)
-    with col_cat1:
-        st.metric("Catalyst Sentiment Score", f"{cat_score:+.1f}%", delta=catalyst_impact['bias_tag'])
-    with col_cat2:
-        st.metric("Base DCF Fair Value", f"₹{fair_target:,.1f}")
-    with col_cat3:
-        st.metric("Sentiment-Adjusted Fair Value", f"₹{adj_target:,.1f}", delta=f"{price_impact:+.1f}%")
-    with col_cat4:
-        st.metric("Predicted Bias", bias_desc.split()[0], delta=f"Growth {rev_impact:+.1f}% | WACC {wacc_adj:+.0f}bps")
-
-    # Predictive Impact Visual Comparison
-    fig_cat_comp = go.Figure()
-    cat_methods = ["Current Market Price (CMP)", "Base DCF Fair Value", "Sentiment-Adjusted Fair Value"]
-    cat_vals = [cmp, fair_target, adj_target]
-    cat_colors = ["#f43f5e", "#38bdf8", "#34d399" if adj_target >= fair_target else "#fbbf24"]
-
-    fig_cat_comp.add_trace(go.Bar(
-        y=cat_methods,
-        x=cat_vals,
+    # 3. Simple Visual: Target Price vs CMP
+    st.markdown("##### 🎯 Simple Price Target Bar")
+    fig_simple = go.Figure()
+    fig_simple.add_trace(go.Bar(
+        y=["What It's Worth (Fair Value)", "What You Pay (Current Price)"],
+        x=[fair_target, cmp],
         orientation="h",
-        marker=dict(color=cat_colors, line=dict(color="#1e222d", width=1.5)),
-        text=[f"₹{v:,.1f}" for v in cat_vals],
+        marker=dict(color=["#3fb950" if diff_pct >= 0 else "#f85149", "#58a6ff"]),
+        text=[f"₹{fair_target:,.1f} (Fair Value)", f"₹{cmp:,.1f} (Current Price)"],
         textposition="inside",
-        insidetextanchor="middle",
-        textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
+        textfont=dict(color="#ffffff", size=13, family="Inter, sans-serif"),
         hovertemplate="<b>%{y}</b>: ₹%{x:,.1f}<extra></extra>"
     ))
-    apply_market_theme(
-        fig_cat_comp,
-        title="Market Price vs. Unadjusted DCF vs. Real-Time News Catalyst Adjusted Fair Value",
-        height=240,
-        show_legend=False,
-        xaxis_title="Price Per Share (₹)"
-    )
-    st.plotly_chart(fig_cat_comp, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+    apply_market_theme(fig_simple, height=200, show_legend=False, xaxis_title="Price Per Share (₹)")
+    st.plotly_chart(fig_simple, use_container_width=True, config={'displayModeBar': False})
 
-    # Key Catalyst Summary Bullets
-    st.markdown("###### Catalyst Model Key Takeaways")
-    for b in catalyst_impact.get('summary_bullets', []):
-        st.markdown(f"- {b}")
+    # 4. Practical Newbie Advice Checklist
+    col_chk1, col_chk2 = st.columns(2)
+    with col_chk1:
+        st.markdown("##### 📌 3 Simple Rules for Investing in this Stock")
+        st.markdown("""
+        * **1. Don't Put All Money at Once**: Always use **Staggered Buying (SIP)** over 3 to 6 months rather than investing your entire capital in a single day.
+        * **2. Diversification Rule**: Never invest more than **5% to 10%** of your total portfolio into any single company, no matter how good it looks.
+        * **3. Long-Term Horizon**: Fair values materialize over **2 to 5 years**. Do not treat this as day-trading tips or instant lottery tickets.
+        """)
+    with col_chk2:
+        st.markdown("##### 📰 Latest News Key Takeaways (In Simple Words)")
+        for b in catalyst_impact.get('summary_bullets', []):
+            st.markdown(f"- {b}")
 
-    st.markdown("---")
-    st.markdown("##### Curated Real-Time Financial News Stream")
+    # 5. Interactive Jargon Buster ("Explain Like I'm 15")
+    with st.expander("❓ Jargon Buster — What do these finance terms mean in plain English?", expanded=False):
+        st.markdown("""
+        * **Current Market Price (CMP)**: The exact price you pay on your broker app (Zerodha, Groww, Angel One) right now to buy 1 share.
+        * **Fair Value / Intrinsic Target**: What the company is *actually* worth based on the real cash profits it generates. Think of it like assessing the genuine value of a rental apartment based on its yearly rent collection.
+        * **Margin of Safety**: Buying something for less than it's worth. If a ₹100 shirt is sold for ₹80, you have a 20% margin of safety.
+        * **ROCE (Return on Capital Employed)**: Tells you how smart the management is at turning money into profit. Above **15%** is generally considered a strong wealth creator!
+        * **P/E Ratio (Price-to-Earnings)**: How many rupees investors are willing to pay for every ₹1 of profit the company makes. Lower usually means cheaper, but quality companies often command higher P/E.
+        * **Debt-to-Equity**: Measures how much the company relies on borrowed bank loans versus its own money. Low debt protects you during bad economic times.
+        * **DCF (Discounted Cash Flow)**: The gold standard Wall Street mathematical formula that calculates a company's total future cash earnings and converts them into today's rupees.
+        """)
 
-    if not articles:
-        st.info("No recent financial news articles were retrieved for this ticker. Check back during active market hours.")
-    else:
-        # Filter buttons
-        filter_col, _ = st.columns([2, 4])
-        with filter_col:
-            news_filter = st.selectbox("Filter News by Sentiment", ["All Articles", "Positive / Tailwinds", "Negative / Headwinds", "Neutral"], index=0)
 
-        for art in articles:
-            if news_filter == "Positive / Tailwinds" and art['sentiment_label'] != "Positive":
-                continue
-            if news_filter == "Negative / Headwinds" and art['sentiment_label'] != "Negative":
-                continue
-            if news_filter == "Neutral" and art['sentiment_label'] != "Neutral":
-                continue
+# =============================================================================
+# VIEW 2: PRO ANALYST SUITE (Full Institutional Capabilities)
+# =============================================================================
+else:
+    # Compact KPI Strip
+    upside_sign = "+" if fair_upside >= 0 else ""
+    kpi_cols = st.columns(7)
+    with kpi_cols[0]:
+        st.metric("CMP", f"₹{cmp:,.1f}" if cmp > 0 else "N/A")
+    with kpi_cols[1]:
+        st.metric("Fair Value", f"₹{fair_target:,.1f}", delta=f"{upside_sign}{fair_upside:.1f}%")
+    with kpi_cols[2]:
+        st.metric("Market Cap", f"₹{mcap:,.0f} Cr" if mcap > 0 else "N/A")
+    with kpi_cols[3]:
+        st.metric("P/E Ratio", f"{kpis.get('Stock P/E', 'N/A')}")
+    with kpi_cols[4]:
+        st.metric("Book Value", f"₹{kpis.get('Book Value', 'N/A')}")
+    with kpi_cols[5]:
+        st.metric("ROCE", f"{kpis.get('ROCE', 'N/A')}%")
+    with kpi_cols[6]:
+        st.metric("ROE", f"{kpis.get('ROE', 'N/A')}%")
 
-            badge_html = (
-                '<span class="badge-pos">● Positive Tailwinds</span>' if art['sentiment_label'] == 'Positive'
-                else ('<span class="badge-neg">● Negative Headwinds</span>' if art['sentiment_label'] == 'Negative'
-                else '<span class="badge-neu">● Neutral</span>')
-            )
-            cat_html = f'<span class="badge-cat">{art["catalyst"]}</span>'
+    tab_overview, tab_news, tab_forecast, tab_valuation, tab_sensitivity, tab_statements, tab_excel = st.tabs([
+        "Overview", "News & Catalysts", "Forecast", "Valuation", "Sensitivity", "Statements", "Excel Export"
+    ])
 
-            st.markdown(f"""
-            <div class="news-card">
-                <div class="news-title">{art['title']}</div>
-                <div class="news-meta">
-                    Source: <strong>{art['source']}</strong> &bull; {art['pub_date']} &bull; {badge_html} {cat_html}
+    # Tab: Overview
+    with tab_overview:
+        methods = ["Exit Multiple Method", "Gordon Growth Method", "Blended Fair Value"]
+        targets = [m_target, g_target, fair_target]
+        upsides = [m_upside, g_upside, fair_upside]
+        bar_colors = ["#38bdf8", "#34d399", "#818cf8"]
+
+        fig_val_comp = go.Figure()
+        fig_val_comp.add_trace(go.Bar(
+            y=methods, x=targets, orientation="h",
+            marker=dict(color=bar_colors, line=dict(color="#1e222d", width=1.5)),
+            text=[f"₹{t:,.1f} ({'+' if u >= 0 else ''}{u:.1f}%)" for t, u in zip(targets, upsides)],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
+            hovertemplate="<b>%{y}</b><br>Target Price: ₹%{x:,.1f}<extra></extra>"
+        ))
+        if cmp > 0:
+            fig_val_comp.add_vline(x=cmp, line_width=2.5, line_dash="dash", line_color="#f43f5e", annotation_text=f"CMP: ₹{cmp:,.1f}", annotation_position="top right")
+        apply_market_theme(fig_val_comp, title="DCF Target Price Comparison vs. Current Market Price (CMP)", height=260, show_legend=False, xaxis_title="Price Per Share (₹)")
+        st.plotly_chart(fig_val_comp, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+
+        col_ov1, col_ov2 = st.columns(2)
+        with col_ov1:
+            st.markdown("##### Valuation Takeaways")
+            diff_val = fair_target - cmp
+            status_text = "Undervalued (Favorable Entry)" if diff_val > 0 else "Overvalued (Premium Multiple)"
+            summary_df = pd.DataFrame([
+                {"Parameter": "Valuation Assessment", "Value": status_text},
+                {"Parameter": "Blended Fair Value", "Value": f"₹{fair_target:,.1f}"},
+                {"Parameter": "Implied Margin of Safety", "Value": f"{fair_upside:+.1f}%"},
+                {"Parameter": "Gordon Growth Target (Perpetual)", "Value": f"₹{g_target:,.1f} ({g_upside:+.1f}%)"},
+                {"Parameter": "Exit Multiple Target (EV/EBITDA)", "Value": f"₹{m_target:,.1f} ({m_upside:+.1f}%)"},
+                {"Parameter": "Cost of Capital (WACC)", "Value": f"{wacc_pct:.2f}%"},
+                {"Parameter": "Perpetual Terminal Growth (g)", "Value": f"{term_g*100:.2f}%"}
+            ])
+            st.dataframe(summary_df, hide_index=True, use_container_width=True)
+
+        with col_ov2:
+            st.markdown("##### Operating Profile & Drivers")
+            backtest = fc_results['backtest']
+            best_model = backtest.get('best_model', 'Auto-Regressive')
+            best_eval = backtest['model_evaluations'].get(best_model, {})
+            mape_val = best_eval.get('mape', 'N/A')
+            pl_df = raw_data['profit_loss']
+            hist_years = fc_results['historical_years']
+            sales_hist_row = pl_df.loc['Sales'] if 'Sales' in pl_df.index else pd.Series()
+            sales_start = float(sales_hist_row.get(hist_years[0], 0.0))
+            sales_end = float(sales_hist_row.get(hist_years[-1], 0.0))
+            cagr_hist = ((sales_end / sales_start) ** (1.0 / max(1, len(hist_years) - 1)) - 1.0) * 100 if sales_start > 0 else 0.0
+            sales_fc = fc_results['forecast_statements']['sales']
+            cagr_fc = ((sales_fc[-1] / sales_end) ** (1.0 / len(sales_fc)) - 1.0) * 100 if sales_end > 0 else 0.0
+
+            driver_df = pd.DataFrame([
+                {"Metric": "Optimal Forecasting Engine", "Value": f"{best_model}"},
+                {"Metric": "Out-of-Sample Backtest MAPE", "Value": f"{mape_val}%"},
+                {"Metric": "Historical Revenue CAGR", "Value": f"{cagr_hist:.1f}% ({len(hist_years)} Periods)"},
+                {"Metric": "Projected 5-Yr Revenue CAGR", "Value": f"{cagr_fc:.1f}%"},
+                {"Metric": "Audited Fiscal Periods Analyzed", "Value": f"{hist_years[0]} to {hist_years[-1]}"},
+                {"Metric": "Forecast Horizon", "Value": f"{fc_results['future_years'][0]} to {fc_results['future_years'][-1]}"},
+                {"Metric": "Discounting Framework", "Value": "Mid-Year Convention (t - 0.5)"}
+            ])
+            st.dataframe(driver_df, hide_index=True, use_container_width=True)
+
+    # Tab: News & Catalysts
+    with tab_news:
+        st.markdown("##### Real-Time News Catalysts & Market Impact Model")
+        cat_score = catalyst_impact['catalyst_score']
+        bias_desc = catalyst_impact['sentiment_bias']
+        adj_target = catalyst_impact['sentiment_adjusted_target']
+        price_impact = catalyst_impact['price_impact_pct']
+        rev_impact = catalyst_impact['revenue_growth_impact_pct']
+        wacc_adj = catalyst_impact['wacc_impact_bps']
+
+        col_cat1, col_cat2, col_cat3, col_cat4 = st.columns(4)
+        with col_cat1:
+            st.metric("Catalyst Sentiment Score", f"{cat_score:+.1f}%", delta=catalyst_impact['bias_tag'])
+        with col_cat2:
+            st.metric("Base DCF Fair Value", f"₹{fair_target:,.1f}")
+        with col_cat3:
+            st.metric("Sentiment-Adjusted Fair Value", f"₹{adj_target:,.1f}", delta=f"{price_impact:+.1f}%")
+        with col_cat4:
+            st.metric("Predicted Bias", bias_desc.split()[0], delta=f"Growth {rev_impact:+.1f}% | WACC {wacc_adj:+.0f}bps")
+
+        fig_cat_comp = go.Figure()
+        cat_methods = ["Current Market Price (CMP)", "Base DCF Fair Value", "Sentiment-Adjusted Fair Value"]
+        cat_vals = [cmp, fair_target, adj_target]
+        cat_colors = ["#f43f5e", "#38bdf8", "#34d399" if adj_target >= fair_target else "#fbbf24"]
+
+        fig_cat_comp.add_trace(go.Bar(
+            y=cat_methods, x=cat_vals, orientation="h",
+            marker=dict(color=cat_colors, line=dict(color="#1e222d", width=1.5)),
+            text=[f"₹{v:,.1f}" for v in cat_vals],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
+            hovertemplate="<b>%{y}</b>: ₹%{x:,.1f}<extra></extra>"
+        ))
+        apply_market_theme(fig_cat_comp, title="Market Price vs. Unadjusted DCF vs. News Catalyst Adjusted Fair Value", height=240, show_legend=False, xaxis_title="Price Per Share (₹)")
+        st.plotly_chart(fig_cat_comp, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+
+        st.markdown("###### Catalyst Model Key Takeaways")
+        for b in catalyst_impact.get('summary_bullets', []):
+            st.markdown(f"- {b}")
+
+        st.markdown("---")
+        st.markdown("##### Curated Real-Time Financial News Stream")
+        if not articles:
+            st.info("No recent financial news articles were retrieved for this ticker.")
+        else:
+            filter_col, _ = st.columns([2, 4])
+            with filter_col:
+                news_filter = st.selectbox("Filter News by Sentiment", ["All Articles", "Positive / Tailwinds", "Negative / Headwinds", "Neutral"], index=0)
+
+            for art in articles:
+                if news_filter == "Positive / Tailwinds" and art['sentiment_label'] != "Positive":
+                    continue
+                if news_filter == "Negative / Headwinds" and art['sentiment_label'] != "Negative":
+                    continue
+                if news_filter == "Neutral" and art['sentiment_label'] != "Neutral":
+                    continue
+
+                badge_html = (
+                    '<span class="badge-pos">● Positive Tailwinds</span>' if art['sentiment_label'] == 'Positive'
+                    else ('<span class="badge-neg">● Negative Headwinds</span>' if art['sentiment_label'] == 'Negative'
+                    else '<span class="badge-neu">● Neutral</span>')
+                )
+                cat_html = f'<span class="badge-cat">{art["catalyst"]}</span>'
+                st.markdown(f"""
+                <div class="news-card">
+                    <div class="news-title">{art['title']}</div>
+                    <div class="news-meta">Source: <strong>{art['source']}</strong> &bull; {art['pub_date']} &bull; {badge_html} {cat_html}</div>
+                    <div><a href="{art['link']}" target="_blank" class="news-link">Read Full Coverage on {art['source']} ↗</a></div>
                 </div>
-                <div>
-                    <a href="{art['link']}" target="_blank" class="news-link">Read Full Coverage on {art['source']} ↗</a>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
+    # Tab: Forecast
+    with tab_forecast:
+        hist_years = fc_results['historical_years']
+        future_years = fc_results['future_years']
+        pl_df = raw_data['profit_loss']
+        sales_hist = [float(pl_df.loc['Sales', y]) if 'Sales' in pl_df.index and y in pl_df.columns else 0.0 for y in hist_years]
+        ebitda_hist = [float(pl_df.loc['Operating Profit', y]) if 'Operating Profit' in pl_df.index and y in pl_df.columns else 0.0 for y in hist_years]
+        sales_fc = fc_results['forecast_statements']['sales']
+        ebitda_fc = fc_results['forecast_statements']['ebitda']
+        fcff_fc = fc_results['forecast_statements']['fcff']
 
-# =============================================================================
-# TAB 3: FORECAST
-# =============================================================================
-with tab_forecast:
-    hist_years = fc_results['historical_years']
-    future_years = fc_results['future_years']
-    pl_df = raw_data['profit_loss']
+        st.markdown("##### Historical vs. Forecast Trajectory (Revenue, EBITDA & FCFF)")
+        fig_traj = go.Figure()
+        fig_traj.add_trace(go.Scatter(x=hist_years, y=sales_hist, mode='lines+markers', name='Revenue (Actual)', line=dict(color='#38bdf8', width=2.8), marker=dict(size=6, color='#38bdf8')))
+        fig_traj.add_trace(go.Scatter(x=[hist_years[-1]] + future_years, y=[sales_hist[-1]] + sales_fc, mode='lines+markers', name='Revenue (Forecast)', line=dict(color='#60a5fa', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond', color='#60a5fa')))
+        fig_traj.add_trace(go.Scatter(x=hist_years, y=ebitda_hist, mode='lines+markers', name='EBITDA (Actual)', line=dict(color='#10b981', width=2.2), marker=dict(size=5, color='#10b981')))
+        fig_traj.add_trace(go.Scatter(x=[hist_years[-1]] + future_years, y=[ebitda_hist[-1]] + ebitda_fc, mode='lines+markers', name='EBITDA (Forecast)', line=dict(color='#34d399', width=2.0, dash='dash'), marker=dict(size=5, symbol='diamond', color='#34d399')))
+        fig_traj.add_trace(go.Scatter(x=future_years, y=fcff_fc, mode='lines+markers', name='FCFF (Forecast)', line=dict(color='#c084fc', width=2.2, dash='dot'), marker=dict(size=6, symbol='triangle-up', color='#c084fc')))
+        fig_traj.add_vline(x=hist_years[-1], line_width=1.5, line_dash="dash", line_color="#64748b")
+        fig_traj.add_vrect(x0=hist_years[-1], x1=future_years[-1], fillcolor="rgba(56, 189, 248, 0.08)", layer="below", line_width=0, annotation_text="Forecast Horizon →", annotation_position="top left", annotation_font=dict(size=11, color="#94a3b8", family="Inter, sans-serif"))
+        apply_market_theme(fig_traj, height=400, show_legend=True, xaxis_title="Fiscal Period", yaxis_title="Amount (₹ Cr.)")
+        fig_traj.update_xaxes(tickangle=-25)
+        st.plotly_chart(fig_traj, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    sales_hist = [float(pl_df.loc['Sales', y]) if 'Sales' in pl_df.index and y in pl_df.columns else 0.0 for y in hist_years]
-    ebitda_hist = [float(pl_df.loc['Operating Profit', y]) if 'Operating Profit' in pl_df.index and y in pl_df.columns else 0.0 for y in hist_years]
+        st.markdown("##### Revenue Scenario Analysis (Base vs. Bull vs. Bear)")
+        sales_bull = fc_results['scenarios']['bull']['sales']
+        sales_bear = fc_results['scenarios']['bear']['sales']
+        fig_scen = go.Figure()
+        fig_scen.add_trace(go.Scatter(x=future_years, y=sales_bull, mode='lines+markers', name='Bull Case (+0.5σ)', line=dict(color='#22c55e', width=2.0, dash='dot'), marker=dict(size=6, color='#22c55e')))
+        fig_scen.add_trace(go.Scatter(x=future_years, y=sales_bear, mode='lines+markers', name='Bear Case (-0.5σ)', line=dict(color='#f43f5e', width=2.0, dash='dot'), marker=dict(size=6, color='#f43f5e'), fill='tonexty', fillcolor='rgba(56, 189, 248, 0.1)'))
+        fig_scen.add_trace(go.Scatter(x=future_years, y=sales_fc, mode='lines+markers', name='Base Case', line=dict(color='#38bdf8', width=3.0), marker=dict(size=8, color='#38bdf8')))
+        y_all = sales_bull + sales_bear + sales_fc
+        y_min, y_max = min(y_all), max(y_all)
+        y_padding = max(100.0, (y_max - y_min) * 0.35)
+        apply_market_theme(fig_scen, height=360, show_legend=True, xaxis_title="Forecast Fiscal Period", yaxis_title="Sales (₹ Cr.)")
+        fig_scen.update_layout(yaxis=dict(range=[max(0.0, y_min - y_padding), y_max + y_padding]))
+        st.plotly_chart(fig_scen, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    sales_fc = fc_results['forecast_statements']['sales']
-    ebitda_fc = fc_results['forecast_statements']['ebitda']
-    fcff_fc = fc_results['forecast_statements']['fcff']
+    # Tab: Valuation
+    with tab_valuation:
+        if g_data.get('high_tv_warning', False):
+            st.warning(f"Terminal Value represents **{g_data['tv_percent_of_ev']}%** of Enterprise Value. Valuation results are highly sensitive to Terminal Growth ({g_data['terminal_growth_pct']}%) and WACC ({wacc_pct}%).")
+        st.markdown("##### Enterprise Value to Equity Value Bridge")
+        cum_fcf = val_results['valuation_bridge']['cumulative_pv_fcff_cr']
+        pv_tv = g_data['pv_terminal_value_cr']
+        ev = g_data['enterprise_value_cr']
+        cash = val_results['valuation_bridge']['cash_and_investments_cr']
+        debt = val_results['valuation_bridge']['total_debt_cr']
+        eq_val = g_data['implied_equity_value_cr']
 
-    # 2. Historical vs. Forecast Financials (High-Contrast Pro Dark Chart)
-    st.markdown("##### Historical vs. Forecast Trajectory (Revenue, EBITDA & FCFF)")
-    
-    fig_traj = go.Figure()
+        fig_wf = go.Figure(go.Waterfall(
+            name="Bridge", orientation="v", measure=["relative", "relative", "total", "relative", "relative", "total"],
+            x=["PV of 5-Yr FCFF", "PV of Terminal Value", "Enterprise Value", "(+) Cash & Inv.", "(-) Total Debt", "Equity Value"],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
+            text=[f"₹{cum_fcf:,.0f}", f"₹{pv_tv:,.0f}", f"₹{ev:,.0f}", f"₹{cash:,.0f}", f"-₹{debt:,.0f}", f"₹{eq_val:,.0f}"],
+            y=[cum_fcf, pv_tv, ev, cash, -debt, eq_val],
+            connector={"line": {"color": "#64748b", "width": 1.5}},
+            increasing={"marker": {"color": "#10b981"}},
+            decreasing={"marker": {"color": "#f43f5e"}},
+            totals={"marker": {"color": "#6366f1"}}
+        ))
+        apply_market_theme(fig_wf, height=380, show_legend=False, yaxis_title="Value (₹ Cr.)")
+        st.plotly_chart(fig_wf, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    # Revenue: Historical (Solid Cyan) & Forecast (Dashed Sky Blue)
-    fig_traj.add_trace(go.Scatter(
-        x=hist_years, y=sales_hist, mode='lines+markers', name='Revenue (Actual)',
-        line=dict(color='#38bdf8', width=2.8), marker=dict(size=6, color='#38bdf8'),
-        hovertemplate="FY %{x}<br>Actual Revenue: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-    fig_traj.add_trace(go.Scatter(
-        x=[hist_years[-1]] + future_years, y=[sales_hist[-1]] + sales_fc, mode='lines+markers', name='Revenue (Forecast)',
-        line=dict(color='#60a5fa', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond', color='#60a5fa'),
-        hovertemplate="FY %{x}<br>Forecast Revenue: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
+        col_w1, col_w2 = st.columns(2)
+        with col_w1:
+            st.markdown("##### Weighted Average Cost of Capital (WACC)")
+            w_p = val_results['wacc_parameters']
+            w_breakdown = pd.DataFrame([
+                {"Component": "Risk-Free Rate (Rf)", "Value": f"{w_p['risk_free_rate_pct']:.2f}%"},
+                {"Component": "Equity Risk Premium (ERP)", "Value": f"{w_p['equity_risk_premium_pct']:.2f}%"},
+                {"Component": "Beta (β)", "Value": f"{w_p['beta']:.2f}"},
+                {"Component": "Cost of Equity (Ke)", "Value": f"{w_p['cost_of_equity_pct']:.2f}%"},
+                {"Component": "Calculated WACC", "Value": f"{w_p['wacc_pct']:.2f}%"}
+            ])
+            st.dataframe(w_breakdown, hide_index=True, use_container_width=True)
+        with col_w2:
+            st.markdown("##### Valuation Bridge Output")
+            out_table = pd.DataFrame([
+                {"Metric": "Discounting Framework", "Value": "Mid-Year Convention (t - 0.5)"},
+                {"Metric": "5-Year Cumulative PV of FCFF", "Value": f"₹{cum_fcf:,.1f} Cr."},
+                {"Metric": "PV of Terminal Value", "Value": f"₹{pv_tv:,.1f} Cr."},
+                {"Metric": "Enterprise Value (EV)", "Value": f"₹{ev:,.1f} Cr."},
+                {"Metric": "Implied Equity Value", "Value": f"₹{eq_val:,.1f} Cr."},
+                {"Metric": "Gordon Growth Target Price", "Value": f"₹{g_target:,.1f}"}
+            ])
+            st.dataframe(out_table, hide_index=True, use_container_width=True)
 
-    # EBITDA: Historical (Solid Mint) & Forecast (Dashed Green)
-    fig_traj.add_trace(go.Scatter(
-        x=hist_years, y=ebitda_hist, mode='lines+markers', name='EBITDA (Actual)',
-        line=dict(color='#10b981', width=2.2), marker=dict(size=5, color='#10b981'),
-        hovertemplate="FY %{x}<br>Actual EBITDA: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-    fig_traj.add_trace(go.Scatter(
-        x=[hist_years[-1]] + future_years, y=[ebitda_hist[-1]] + ebitda_fc, mode='lines+markers', name='EBITDA (Forecast)',
-        line=dict(color='#34d399', width=2.0, dash='dash'), marker=dict(size=5, symbol='diamond', color='#34d399'),
-        hovertemplate="FY %{x}<br>Forecast EBITDA: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-
-    # FCFF: Forecast (Bright Lavender)
-    fig_traj.add_trace(go.Scatter(
-        x=future_years, y=fcff_fc, mode='lines+markers', name='FCFF (Forecast)',
-        line=dict(color='#c084fc', width=2.2, dash='dot'), marker=dict(size=6, symbol='triangle-up', color='#c084fc'),
-        hovertemplate="FY %{x}<br>Projected FCFF: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-
-    # Vertical divider separating historical actuals from forecast
-    fig_traj.add_vline(
-        x=hist_years[-1],
-        line_width=1.5,
-        line_dash="dash",
-        line_color="#64748b"
-    )
-
-    # Shaded forecast horizon with clean tint
-    fig_traj.add_vrect(
-        x0=hist_years[-1],
-        x1=future_years[-1],
-        fillcolor="rgba(56, 189, 248, 0.08)",
-        layer="below",
-        line_width=0,
-        annotation_text="Forecast Horizon →",
-        annotation_position="top left",
-        annotation_font=dict(size=11, color="#94a3b8", family="Inter, sans-serif")
-    )
-
-    apply_market_theme(
-        fig_traj,
-        height=400,
-        show_legend=True,
-        xaxis_title="Fiscal Period",
-        yaxis_title="Amount (₹ Cr.)"
-    )
-    fig_traj.update_xaxes(tickangle=-25)
-    st.plotly_chart(fig_traj, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
-
-    # 3. Scenario Analysis Chart (Base vs. Bull vs. Bear with Dynamic Scaling)
-    st.markdown("##### Revenue Scenario Analysis (Base vs. Bull vs. Bear)")
-    sales_bull = fc_results['scenarios']['bull']['sales']
-    sales_bear = fc_results['scenarios']['bear']['sales']
-
-    fig_scen = go.Figure()
-    # Bull Case (Vivid Emerald)
-    fig_scen.add_trace(go.Scatter(
-        x=future_years, y=sales_bull, mode='lines+markers', name='Bull Case (+0.5σ)',
-        line=dict(color='#22c55e', width=2.0, dash='dot'), marker=dict(size=6, color='#22c55e'),
-        hovertemplate="FY %{x}<br>Bull Sales: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-    # Bear Case (Vivid Coral)
-    fig_scen.add_trace(go.Scatter(
-        x=future_years, y=sales_bear, mode='lines+markers', name='Bear Case (-0.5σ)',
-        line=dict(color='#f43f5e', width=2.0, dash='dot'), marker=dict(size=6, color='#f43f5e'),
-        fill='tonexty', fillcolor='rgba(56, 189, 248, 0.1)',
-        hovertemplate="FY %{x}<br>Bear Sales: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-    # Base Case (Vivid Sky Blue)
-    fig_scen.add_trace(go.Scatter(
-        x=future_years, y=sales_fc, mode='lines+markers', name='Base Case',
-        line=dict(color='#38bdf8', width=3.0), marker=dict(size=8, color='#38bdf8'),
-        hovertemplate="FY %{x}<br>Base Sales: ₹%{y:,.0f} Cr<extra></extra>"
-    ))
-
-    # Dynamic Y-axis scale to clearly highlight scenario spreads
-    y_all = sales_bull + sales_bear + sales_fc
-    y_min, y_max = min(y_all), max(y_all)
-    y_padding = max(100.0, (y_max - y_min) * 0.35)
-
-    apply_market_theme(
-        fig_scen,
-        height=360,
-        show_legend=True,
-        xaxis_title="Forecast Fiscal Period",
-        yaxis_title="Sales (₹ Cr.)"
-    )
-    fig_scen.update_layout(yaxis=dict(range=[max(0.0, y_min - y_padding), y_max + y_padding]))
-    st.plotly_chart(fig_scen, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
-
-    # Econometric Backtesting Selection Details
-    with st.expander("Walk-Forward Model Backtest Details", expanded=False):
-        st.write("An ensemble of statistical and econometric models is evaluated using out-of-sample walk-forward testing. The model with the lowest Mean Absolute Percentage Error (MAPE) is selected as the primary driver.")
-        backtest_evals = fc_results['backtest']['model_evaluations']
-        bt_data = []
-        for m_name, m_res in backtest_evals.items():
-            is_winner = "Selected (Lowest MAPE)" if m_name == fc_results['backtest']['best_model'] else ("Invalid" if not m_res.get('is_valid', True) else "Evaluated")
-            bt_data.append({
-                "Forecasting Engine": m_name,
-                "Backtest MAPE (%)": f"{m_res.get('mape', 'N/A')}%" if m_res.get('is_valid', True) else "Failed",
-                "RMSE (₹ Cr.)": f"₹{m_res.get('rmse', 'N/A'):,.0f}" if m_res.get('is_valid', True) else "N/A",
-                "MAE (₹ Cr.)": f"₹{m_res.get('mae', 'N/A'):,.0f}" if m_res.get('is_valid', True) else "N/A",
-                "Status": is_winner
-            })
-        st.dataframe(pd.DataFrame(bt_data), hide_index=True, use_container_width=True)
-
-
-# =============================================================================
-# TAB 4: VALUATION
-# =============================================================================
-with tab_valuation:
-    # High Terminal Value Warning Banner
-    if g_data.get('high_tv_warning', False):
-        st.warning(
-            f"Terminal Value represents **{g_data['tv_percent_of_ev']}%** of Enterprise Value. "
-            f"Valuation results are highly sensitive to Terminal Growth ({g_data['terminal_growth_pct']}%) and WACC ({wacc_pct}%)."
-        )
-
-    # 4. Enterprise Value to Equity Value Waterfall Bridge (High-Contrast White Text)
-    st.markdown("##### Enterprise Value to Equity Value Bridge")
-    cum_fcf = val_results['valuation_bridge']['cumulative_pv_fcff_cr']
-    pv_tv = g_data['pv_terminal_value_cr']
-    ev = g_data['enterprise_value_cr']
-    cash = val_results['valuation_bridge']['cash_and_investments_cr']
-    debt = val_results['valuation_bridge']['total_debt_cr']
-    eq_val = g_data['implied_equity_value_cr']
-
-    fig_wf = go.Figure(go.Waterfall(
-        name="Bridge",
-        orientation="v",
-        measure=["relative", "relative", "total", "relative", "relative", "total"],
-        x=["PV of 5-Yr FCFF", "PV of Terminal Value", "Enterprise Value", "(+) Cash & Inv.", "(-) Total Debt", "Equity Value"],
-        textposition="inside",
-        insidetextanchor="middle",
-        textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
-        text=[f"₹{cum_fcf:,.0f}", f"₹{pv_tv:,.0f}", f"₹{ev:,.0f}", f"₹{cash:,.0f}", f"-₹{debt:,.0f}", f"₹{eq_val:,.0f}"],
-        y=[cum_fcf, pv_tv, ev, cash, -debt, eq_val],
-        connector={"line": {"color": "#64748b", "width": 1.5}},
-        increasing={"marker": {"color": "#10b981"}},
-        decreasing={"marker": {"color": "#f43f5e"}},
-        totals={"marker": {"color": "#6366f1"}}
-    ))
-    apply_market_theme(
-        fig_wf,
-        height=380,
-        show_legend=False,
-        yaxis_title="Value (₹ Cr.)"
-    )
-    st.plotly_chart(fig_wf, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
-
-    # WACC Breakdown & Bridge Metrics
-    col_w1, col_w2 = st.columns(2)
-    with col_w1:
-        st.markdown("##### Weighted Average Cost of Capital (WACC)")
-        w_p = val_results['wacc_parameters']
-        w_breakdown = pd.DataFrame([
-            {"Component": "Risk-Free Rate (Rf)", "Value": f"{w_p['risk_free_rate_pct']:.2f}%"},
-            {"Component": "Equity Risk Premium (ERP)", "Value": f"{w_p['equity_risk_premium_pct']:.2f}%"},
-            {"Component": "Beta (β)", "Value": f"{w_p['beta']:.2f}"},
-            {"Component": "Cost of Equity (Ke)", "Value": f"{w_p['cost_of_equity_pct']:.2f}%"},
-            {"Component": "Pre-Tax Cost of Debt (Kd)", "Value": f"{w_p['cost_of_debt_pre_tax_pct']:.2f}%"},
-            {"Component": "Post-Tax Cost of Debt (Kd)", "Value": f"{w_p['cost_of_debt_post_tax_pct']:.2f}%"},
-            {"Component": "Weight of Equity (We)", "Value": f"{w_p['weight_equity_pct']:.1f}%"},
-            {"Component": "Weight of Debt (Wd)", "Value": f"{w_p['weight_debt_pct']:.1f}%"},
-            {"Component": "Calculated WACC", "Value": f"{w_p['wacc_pct']:.2f}%"}
-        ])
-        st.dataframe(w_breakdown, hide_index=True, use_container_width=True)
-
-    with col_w2:
-        st.markdown("##### Valuation Bridge & Per-Share Output")
-        out_table = pd.DataFrame([
-            {"Metric": "Discounting Framework", "Value": "Mid-Year Convention (t - 0.5)"},
-            {"Metric": "5-Year Cumulative PV of FCFF", "Value": f"₹{cum_fcf:,.1f} Cr."},
-            {"Metric": "PV of Terminal Value", "Value": f"₹{pv_tv:,.1f} Cr."},
-            {"Metric": "% Terminal Value of Total EV", "Value": f"{g_data['tv_percent_of_ev']}%"},
-            {"Metric": "Enterprise Value (EV)", "Value": f"₹{ev:,.1f} Cr."},
-            {"Metric": "(+) Cash & Liquid Investments", "Value": f"₹{cash:,.1f} Cr."},
-            {"Metric": "(-) Total Borrowings (Debt)", "Value": f"₹{debt:,.1f} Cr."},
-            {"Metric": "Implied Equity Value", "Value": f"₹{eq_val:,.1f} Cr."},
-            {"Metric": "Diluted Shares Outstanding", "Value": f"{val_results['valuation_bridge']['shares_outstanding_cr']:,.1f} Cr."},
-            {"Metric": "Gordon Growth Target Price", "Value": f"₹{g_target:,.1f}"}
-        ])
-        st.dataframe(out_table, hide_index=True, use_container_width=True)
-
-
-# =============================================================================
-# TAB 5: SENSITIVITY
-# =============================================================================
-with tab_sensitivity:
-    st.markdown("##### Two-Way Sensitivity Analysis")
-    st.write("Target share price sensitivity across varying Cost of Capital (WACC), Terminal Growth Rates (g), and Exit Multiples. Combinations where WACC &le; g are marked N/A.")
-
-    sens_g = val_results['sensitivity_gordon']
-    sens_m = val_results['sensitivity_multiple']
-
-    col_hm1, col_hm2 = st.columns(2)
-    with col_hm1:
-        st.markdown("###### WACC vs. Terminal Growth Rate (g)")
+    # Tab: Sensitivity
+    with tab_sensitivity:
+        st.markdown("##### Two-Way Sensitivity Analysis")
+        sens_g = val_results['sensitivity_gordon']
         matrix_g = np.array([[val if val is not None else np.nan for val in row] for row in sens_g['matrix']], dtype=float)
-        
-        # Prepare clean display text for heatmap cells
-        text_g = []
-        for row in sens_g['matrix']:
-            row_txt = []
-            for val in row:
-                row_txt.append(f"₹{val:,.0f}" if val is not None else "N/A")
-            text_g.append(row_txt)
+        text_g = [[f"₹{val:,.0f}" if val is not None else "N/A" for val in row] for row in sens_g['matrix']]
 
-        fig_hm1 = px.imshow(
-            matrix_g,
-            x=sens_g['wacc_columns'],
-            y=sens_g['growth_rows'],
-            labels=dict(x="WACC", y="Terminal Growth (g)", color="Target (₹)"),
-            color_continuous_scale="Viridis",
-            text_auto=False
-        )
-        fig_hm1.update_traces(
-            text=text_g,
-            texttemplate="%{text}",
-            textfont={"size": 11, "family": "Inter, sans-serif", "color": "#ffffff"},
-            hovertemplate="WACC: %{x}<br>Growth (g): %{y}<br>Target Price: %{text}<extra></extra>"
-        )
+        fig_hm1 = px.imshow(matrix_g, x=sens_g['wacc_columns'], y=sens_g['growth_rows'], labels=dict(x="WACC", y="Terminal Growth (g)", color="Target (₹)"), color_continuous_scale="Viridis", text_auto=False)
+        fig_hm1.update_traces(text=text_g, texttemplate="%{text}", textfont={"size": 11, "family": "Inter, sans-serif", "color": "#ffffff"})
         apply_market_theme(fig_hm1, height=380, show_legend=False)
         st.plotly_chart(fig_hm1, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    with col_hm2:
-        st.markdown("###### WACC vs. Exit Multiple (EV/EBITDA)")
-        matrix_m = np.array(sens_m['matrix'], dtype=float)
-        text_m = [[f"₹{val:,.0f}" for val in row] for row in matrix_m]
+    # Tab: Statements
+    with tab_statements:
+        st.markdown("##### Statement Metric Explorer")
+        metric_options = ["Revenue (Sales)", "Operating Profit (EBITDA)", "Operating Margin (OPM %)", "Net Profit (PAT)", "Free Cash Flow (FCFF)", "Total Borrowings (Debt)"]
+        selected_metric = st.selectbox("Select Financial Metric to Inspect", options=metric_options, index=0)
+        fc_stmt = fc_results['forecast_statements']
+        hist_years = fc_results['historical_years']
+        future_years = fc_results['future_years']
+        pl_df = raw_data['profit_loss']
 
-        fig_hm2 = px.imshow(
-            matrix_m,
-            x=sens_m['wacc_columns'],
-            y=sens_m['multiple_rows'],
-            labels=dict(x="WACC", y="Exit Multiple", color="Target (₹)"),
-            color_continuous_scale="Viridis",
-            text_auto=False
+        hist_vals = [float(pl_df.loc['Sales', y]) if 'Sales' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years] if selected_metric == "Revenue (Sales)" else None
+        fc_vals = fc_stmt['sales'] if selected_metric == "Revenue (Sales)" else fc_stmt['ebitda']
+
+        fig_m = go.Figure()
+        if hist_vals is not None:
+            fig_m.add_trace(go.Scatter(x=hist_years, y=hist_vals, mode='lines+markers', name='Actual', line=dict(color='#38bdf8', width=2.8)))
+            fig_m.add_trace(go.Scatter(x=[hist_years[-1]] + future_years, y=[hist_vals[-1]] + fc_vals, mode='lines+markers', name='Forecast', line=dict(color='#818cf8', width=2.5, dash='dash')))
+        else:
+            fig_m.add_trace(go.Scatter(x=future_years, y=fc_vals, mode='lines+markers', name='Forecast', line=dict(color='#818cf8', width=2.8)))
+        apply_market_theme(fig_m, title=f"{selected_metric} Evolution (₹ Cr.)", height=320, show_legend=True)
+        st.plotly_chart(fig_m, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
+
+        st.markdown("##### 5-Year Forecast Statements (₹ Cr.)")
+        df_forecast_display = pd.DataFrame({
+            "Revenue (Sales)": fc_stmt['sales'],
+            "EBITDA": fc_stmt['ebitda'],
+            "OPM (%)": fc_stmt['opm_pct'],
+            "Net Profit (PAT)": fc_stmt['pat'],
+            "Capex": fc_stmt['capex'],
+            "Free Cash Flow (FCFF)": fc_stmt['fcff'],
+        }, index=fc_results['future_years']).T
+        st.dataframe(df_forecast_display.style.format("{:,.1f}"), use_container_width=True)
+
+    # Tab: Excel Export
+    with tab_excel:
+        st.markdown("##### Download Institutional 8-Worksheet Excel Model")
+        out_filename = f"{ticker}_Financial_Model.xlsx"
+        builder = WorkbookBuilder(raw_data, fc_results, val_results)
+        file_bytes = builder.generate_bytes()
+        st.download_button(
+            label=f"Download {ticker} Financial Model (.xlsx)",
+            data=file_bytes,
+            file_name=out_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True
         )
-        fig_hm2.update_traces(
-            text=text_m,
-            texttemplate="%{text}",
-            textfont={"size": 11, "family": "Inter, sans-serif", "color": "#ffffff"},
-            hovertemplate="WACC: %{x}<br>Exit Multiple: %{y}<br>Target Price: %{text}<extra></extra>"
-        )
-        apply_market_theme(fig_hm2, height=380, show_legend=False)
-        st.plotly_chart(fig_hm2, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
-
-
-# =============================================================================
-# TAB 6: STATEMENTS
-# =============================================================================
-with tab_statements:
-    st.markdown("##### Statement Metric Explorer")
-    
-    metric_options = [
-        "Revenue (Sales)",
-        "Operating Profit (EBITDA)",
-        "Operating Margin (OPM %)",
-        "EBIT",
-        "Profit Before Tax (PBT)",
-        "Net Profit (PAT)",
-        "Free Cash Flow (FCFF)",
-        "Total Borrowings (Debt)",
-        "Capital Expenditures (Capex)",
-        "Net PP&E (Fixed Assets)"
-    ]
-    
-    selected_metric = st.selectbox("Select Financial Metric to Inspect", options=metric_options, index=0)
-
-    # Metric extraction mapping
-    fc_stmt = fc_results['forecast_statements']
-    hist_years = fc_results['historical_years']
-    future_years = fc_results['future_years']
-    pl_df = raw_data['profit_loss']
-    bs_df = raw_data['balance_sheet']
-
-    hist_vals = None
-    fc_vals = None
-    unit_label = "₹ Cr."
-
-    if selected_metric == "Revenue (Sales)":
-        hist_vals = [float(pl_df.loc['Sales', y]) if 'Sales' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['sales']
-    elif selected_metric == "Operating Profit (EBITDA)":
-        hist_vals = [float(pl_df.loc['Operating Profit', y]) if 'Operating Profit' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['ebitda']
-    elif selected_metric == "Operating Margin (OPM %)":
-        hist_vals = [float(str(pl_df.loc['OPM %', y]).replace('%', '')) if 'OPM %' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['opm_pct']
-        unit_label = "%"
-    elif selected_metric == "EBIT":
-        hist_vals = None
-        fc_vals = fc_stmt['ebit']
-    elif selected_metric == "Profit Before Tax (PBT)":
-        hist_vals = [float(pl_df.loc['Profit before tax', y]) if 'Profit before tax' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['pbt']
-    elif selected_metric == "Net Profit (PAT)":
-        hist_vals = [float(pl_df.loc['Net Profit', y]) if 'Net Profit' in pl_df.index and y in pl_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['pat']
-    elif selected_metric == "Free Cash Flow (FCFF)":
-        hist_vals = None
-        fc_vals = fc_stmt['fcff']
-    elif selected_metric == "Total Borrowings (Debt)":
-        hist_vals = [float(bs_df.loc['Borrowings', y]) if 'Borrowings' in bs_df.index and y in bs_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['debt']
-    elif selected_metric == "Capital Expenditures (Capex)":
-        hist_vals = None
-        fc_vals = fc_stmt['capex']
-    elif selected_metric == "Net PP&E (Fixed Assets)":
-        hist_vals = [float(bs_df.loc['Fixed Assets', y]) if 'Fixed Assets' in bs_df.index and y in bs_df.columns else np.nan for y in hist_years]
-        fc_vals = fc_stmt['fixed_assets']
-
-    fig_metric = go.Figure()
-    if hist_vals is not None:
-        fig_metric.add_trace(go.Scatter(
-            x=hist_years, y=hist_vals, mode='lines+markers', name='Audited Historical',
-            line=dict(color='#38bdf8', width=2.8), marker=dict(size=6, color='#38bdf8'),
-            hovertemplate=f"FY %{{x}}<br>Actual: %{{y:,.1f}} {unit_label}<extra></extra>"
-        ))
-        fig_metric.add_trace(go.Scatter(
-            x=[hist_years[-1]] + future_years, y=[hist_vals[-1]] + fc_vals, mode='lines+markers', name='Projected Forecast',
-            line=dict(color='#818cf8', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond', color='#818cf8'),
-            hovertemplate=f"FY %{{x}}<br>Projected: %{{y:,.1f}} {unit_label}<extra></extra>"
-        ))
-        fig_metric.add_vline(x=hist_years[-1], line_width=1.5, line_dash="dash", line_color="#64748b")
-        fig_metric.add_vrect(
-            x0=hist_years[-1], x1=future_years[-1], fillcolor="rgba(56, 189, 248, 0.08)", layer="below", line_width=0,
-            annotation_text="Forecast Horizon →", annotation_position="top left", annotation_font=dict(size=11, color="#94a3b8", family="Inter, sans-serif")
-        )
-    else:
-        fig_metric.add_trace(go.Scatter(
-            x=future_years, y=fc_vals, mode='lines+markers', name='Projected Forecast',
-            line=dict(color='#818cf8', width=2.8), marker=dict(size=6, color='#818cf8'),
-            hovertemplate=f"FY %{{x}}<br>Projected: %{{y:,.1f}} {unit_label}<extra></extra>"
-        ))
-
-    apply_market_theme(
-        fig_metric,
-        title=f"{selected_metric} Evolution ({unit_label})",
-        height=350,
-        show_legend=True,
-        xaxis_title="Fiscal Period",
-        yaxis_title=f"{selected_metric} ({unit_label})"
-    )
-    fig_metric.update_xaxes(tickangle=-25)
-    st.plotly_chart(fig_metric, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
-
-    # Full 5-Year Statement Table
-    st.markdown("##### 5-Year Comprehensive Forecast Statements (₹ Cr.)")
-    df_forecast_display = pd.DataFrame({
-        "Revenue (Sales)": fc_stmt['sales'],
-        "Operating Expenses": fc_stmt['expenses'],
-        "EBITDA": fc_stmt['ebitda'],
-        "OPM (%)": fc_stmt['opm_pct'],
-        "Depreciation & Amortization": fc_stmt['depreciation'],
-        "EBIT": fc_stmt['ebit'],
-        "Interest Expense": fc_stmt['interest'],
-        "Other Income": fc_stmt['other_income'],
-        "Profit Before Tax (PBT)": fc_stmt['pbt'],
-        "Tax Provision": fc_stmt['tax'],
-        "Net Profit (PAT)": fc_stmt['pat'],
-        "Net Fixed Assets (PP&E)": fc_stmt['fixed_assets'],
-        "Capital Expenditures (Capex)": fc_stmt['capex'],
-        "Total Borrowings (Debt)": fc_stmt['debt'],
-        "Free Cash Flow (FCFF)": fc_stmt['fcff'],
-    }, index=fc_results['future_years']).T
-
-    st.dataframe(df_forecast_display.style.format("{:,.1f}"), use_container_width=True)
-
-
-# =============================================================================
-# TAB 7: EXCEL EXPORT
-# =============================================================================
-with tab_excel:
-    st.markdown("##### Institutional 8-Worksheet Excel Model")
-    st.write("Generate and download the formula-linked `.xlsx` workbook containing dynamic statement linkages, working capital schedules, DCF tables, and built-in audit checks.")
-
-    col_l1, col_l2 = st.columns(2)
-    with col_l1:
-        st.markdown("""
-        * **1. Read_Me**: Operational guide, color coding standard, and dynamic integrity checks.
-        * **2. Raw_Data**: Audited historical statements extracted verbatim from filings.
-        * **3. Historical_Financials**: Standardized historical financials and common-size margin analysis.
-        * **4. Assumptions**: Econometric drivers, working capital cycle, and WACC parameters.
-        """)
-    with col_l2:
-        st.markdown("""
-        * **5. Forecast**: 5-Year 3-statement forecast with zero hardcoded forecast values.
-        * **6. DCF_Valuation**: FCFF discounting, Terminal Value, and Enterprise-to-Equity bridge.
-        * **7. Sensitivity_Analysis**: Two-way sensitivity grids for WACC and growth/multiples.
-        * **8. Dashboard**: Executive KPI cards, DuPont metrics, and audit check status lights.
-        """)
-
-    out_filename = f"{ticker}_Financial_Model.xlsx"
-    builder = WorkbookBuilder(raw_data, fc_results, val_results)
-    file_bytes = builder.generate_bytes()
-
-    st.download_button(
-        label=f"Download {ticker} Financial Model (.xlsx)",
-        data=file_bytes,
-        file_name=out_filename,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-        use_container_width=True
-    )
-    st.caption(f"Status: Workbook successfully compiled ({len(file_bytes)/1024:.1f} KB). Ready for download.")
+        st.caption(f"Status: Workbook successfully compiled ({len(file_bytes)/1024:.1f} KB). Ready for download.")
 
 # -----------------------------------------------------------------------------
 # CONCISE INVESTMENT DISCLAIMER
 # -----------------------------------------------------------------------------
 st.markdown("""
 <div class="disclaimer-card">
-    <strong>Analytical Model Disclaimer:</strong> This application is an automated quantitative financial modeling tool designed for research and educational purposes. Financial projections and intrinsic valuations are estimated algorithmically from historical public filings and user-defined parameters. Outputs do not constitute registered investment, financial, or legal advice, nor a recommendation to buy or sell any security.
+    <strong>Analytical Model Disclaimer:</strong> This application is an automated quantitative financial modeling and research tool. Valuations and forecasts are computed algorithmically from historical public filings and user-defined parameters. Outputs do not constitute registered investment, financial, or legal advice, nor a recommendation to buy or sell any security.
 </div>
 """, unsafe_allow_html=True)
