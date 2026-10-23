@@ -1,13 +1,14 @@
 """
 Financial Model & DCF Valuation Screener
-Clean, modern financial analysis terminal built with Streamlit, Plotly, and OpenPyXL.
+Professional TradingView & Bloomberg-inspired dark terminal interface
+Built with Streamlit, Plotly, and OpenPyXL.
 """
 
 import os
 import sys
 import io
 
-# Ensure current application directory is prioritized in sys.path for Streamlit Cloud
+# Prioritize current application directory in sys.path for Streamlit Cloud
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
@@ -47,7 +48,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Clean, professional financial terminal CSS
+# Professional Pro-Dark Financial Terminal CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -56,20 +57,20 @@ st.markdown("""
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
-    /* Global layout padding */
+    /* Global container padding */
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 1.2rem;
         padding-bottom: 2rem;
         padding-left: 2rem;
         padding-right: 2rem;
-        max-width: 1400px;
+        max-width: 1440px;
     }
 
-    /* Minimalist header bar */
+    /* Terminal header bar */
     .terminal-header {
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid #21262d;
         padding-bottom: 0.8rem;
-        margin-bottom: 1rem;
+        margin-bottom: 1.2rem;
     }
     .company-title-row {
         display: flex;
@@ -78,28 +79,37 @@ st.markdown("""
         flex-wrap: wrap;
     }
     .company-name {
-        font-size: 1.45rem;
+        font-size: 1.55rem;
         font-weight: 700;
-        color: #0f172a;
+        color: #f0f6fc;
         letter-spacing: -0.02em;
         margin: 0;
     }
     .company-ticker {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         font-weight: 600;
-        color: #475569;
-        background: #f1f5f9;
-        padding: 2px 8px;
+        color: #58a6ff;
+        background: rgba(56, 189, 248, 0.12);
+        padding: 3px 9px;
         border-radius: 4px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .company-sector {
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #8b949e;
+        background: #161b22;
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 1px solid #30363d;
     }
     .company-meta {
-        font-size: 0.82rem;
-        color: #64748b;
-        margin-top: 4px;
+        font-size: 0.8rem;
+        color: #8b949e;
+        margin-top: 5px;
     }
 
-    /* Metric strip cards */
+    /* KPI metric strip */
     .metric-strip {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -107,59 +117,61 @@ st.markdown("""
         margin-bottom: 1.2rem;
     }
     .metric-cell {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
+        background-color: #161b22;
+        border: 1px solid #30363d;
         border-radius: 6px;
-        padding: 10px 12px;
+        padding: 10px 14px;
     }
     .metric-label {
         font-size: 0.72rem;
-        color: #64748b;
+        color: #8b949e;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.04em;
         font-weight: 500;
         margin-bottom: 4px;
     }
     .metric-value {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #0f172a;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #f0f6fc;
         line-height: 1.2;
     }
     .metric-badge-pos {
         display: inline-block;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #059669;
+        color: #3fb950;
         margin-top: 2px;
     }
     .metric-badge-neg {
         display: inline-block;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #dc2626;
+        color: #f85149;
         margin-top: 2px;
     }
 
-    /* Discreet banner & disclaimer */
+    /* Discreet terminal disclaimer */
     .disclaimer-card {
-        padding: 10px 14px;
-        background: #f8fafc;
-        border-left: 3px solid #94a3b8;
+        padding: 12px 16px;
+        background: #161b22;
+        border-left: 3px solid #38bdf8;
         border-radius: 4px;
         font-size: 0.78rem;
-        color: #64748b;
+        color: #8b949e;
         margin-top: 2.5rem;
-        line-height: 1.45;
+        line-height: 1.5;
+        border-top: 1px solid #21262d;
+        border-right: 1px solid #21262d;
+        border-bottom: 1px solid #21262d;
     }
 
-    /* Sidebar cleanup */
     .sidebar-section-title {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #475569;
+        color: #8b949e;
         margin-top: 0.8rem;
         margin-bottom: 0.4rem;
     }
@@ -167,52 +179,64 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# Standard Plotly Styling Helper
+# High-Contrast TradingView Dark Chart Theme Helper
 def apply_market_theme(fig, title="", height=380, show_legend=True, xaxis_title=None, yaxis_title=None):
     fig.update_layout(
         title=dict(
             text=title,
-            font=dict(size=13, color="#1e293b", family="Inter, sans-serif")
+            font=dict(size=14, color="#f0f6fc", family="Inter, sans-serif"),
+            x=0.01,
+            xanchor="left"
         ) if title else None,
-        template="plotly_white",
+        template="plotly_dark",
         height=height,
-        margin=dict(l=45, r=35, t=40 if title else 25, b=35),
+        margin=dict(l=50, r=30, t=55 if title else 35, b=45),
         hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor="#1f242c",
+            font_size=12,
+            font_family="Inter, sans-serif",
+            font_color="#ffffff",
+            bordercolor="#38bdf8"
+        ),
         showlegend=show_legend,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(size=11, color="#475569")
+            y=1.03,
+            xanchor="left",
+            x=0.01,
+            font=dict(size=11, color="#c9d1d9", family="Inter, sans-serif"),
+            bgcolor="rgba(0,0,0,0)"
         ),
-        font=dict(family="Inter, -apple-system, sans-serif", color="#334155"),
-        plot_bgcolor="rgba(248, 250, 252, 0.4)",
-        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, -apple-system, sans-serif", color="#c9d1d9"),
+        plot_bgcolor="#131722",
+        paper_bgcolor="#131722",
         xaxis=dict(
-            title=dict(text=xaxis_title, font=dict(size=11, color="#64748b")) if xaxis_title else None,
+            title=dict(text=xaxis_title, font=dict(size=11, color="#8b949e", family="Inter, sans-serif")) if xaxis_title else None,
             showgrid=True,
-            gridcolor="#f1f5f9",
+            gridcolor="#1e222d",
             zeroline=False,
+            tickfont=dict(size=11, color="#8b949e"),
             showspikes=True,
             spikemode="across",
             spikesnap="cursor",
             spikethickness=1,
             spikedash="dot",
-            spikecolor="#94a3b8"
+            spikecolor="#484f58"
         ),
         yaxis=dict(
-            title=dict(text=yaxis_title, font=dict(size=11, color="#64748b")) if yaxis_title else None,
+            title=dict(text=yaxis_title, font=dict(size=11, color="#8b949e", family="Inter, sans-serif")) if yaxis_title else None,
             showgrid=True,
-            gridcolor="#f1f5f9",
+            gridcolor="#1e222d",
             zeroline=False,
+            tickfont=dict(size=11, color="#8b949e"),
             showspikes=True,
             spikemode="across",
             spikesnap="cursor",
             spikethickness=1,
             spikedash="dot",
-            spikecolor="#94a3b8"
+            spikecolor="#484f58"
         )
     )
     return fig
@@ -330,7 +354,7 @@ st.markdown(f"""
     <div class="company-title-row">
         <h1 class="company-name">{company_name}</h1>
         <span class="company-ticker">{ticker}</span>
-        <span class="company-ticker">{sector}</span>
+        <span class="company-sector">{sector}</span>
     </div>
     <div class="company-meta">
         Source: {prov.get('source_url', url_input)} &bull; Reporting Scope: {prov.get('reporting_type', 'Audited')} &bull; Extracted: {prov.get('extracted_at_utc', 'Real-time')}
@@ -339,9 +363,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Compact KPI Strip
-upside_class = "metric-badge-pos" if fair_upside >= 0 else "metric-badge-neg"
 upside_sign = "+" if fair_upside >= 0 else ""
-
 kpi_cols = st.columns(7)
 with kpi_cols[0]:
     st.metric("CMP", f"₹{cmp:,.1f}" if cmp > 0 else "N/A")
@@ -384,18 +406,18 @@ tab_overview, tab_forecast, tab_valuation, tab_sensitivity, tab_statements, tab_
 # TAB 1: OVERVIEW
 # =============================================================================
 with tab_overview:
-    # 1. Company Price and Valuation Overview Visual
+    # 1. High-Contrast Valuation Targets vs CMP Visual
     methods = ["Exit Multiple Method", "Gordon Growth Method", "Blended Fair Value"]
     targets = [m_target, g_target, fair_target]
     upsides = [m_upside, g_upside, fair_upside]
-    bar_colors = ["#3b82f6", "#0d9488", "#0f172a"]
+    bar_colors = ["#38bdf8", "#34d399", "#818cf8"]
 
     fig_val_comp = go.Figure()
     fig_val_comp.add_trace(go.Bar(
         y=methods,
         x=targets,
         orientation="h",
-        marker=dict(color=bar_colors, line=dict(color="#ffffff", width=1)),
+        marker=dict(color=bar_colors, line=dict(color="#1e222d", width=1.5)),
         text=[f"₹{t:,.1f} ({'+' if u >= 0 else ''}{u:.1f}%)" for t, u in zip(targets, upsides)],
         textposition="inside",
         insidetextanchor="middle",
@@ -407,12 +429,12 @@ with tab_overview:
     if cmp > 0:
         fig_val_comp.add_vline(
             x=cmp,
-            line_width=2,
+            line_width=2.5,
             line_dash="dash",
-            line_color="#dc2626",
+            line_color="#f43f5e",
             annotation_text=f"CMP: ₹{cmp:,.1f}",
             annotation_position="top right",
-            annotation_font=dict(color="#dc2626", size=11, family="Inter, sans-serif")
+            annotation_font=dict(color="#f43f5e", size=12, family="Inter, sans-serif")
         )
 
     apply_market_theme(
@@ -485,39 +507,39 @@ with tab_forecast:
     ebitda_fc = fc_results['forecast_statements']['ebitda']
     fcff_fc = fc_results['forecast_statements']['fcff']
 
-    # 2. Historical vs. Forecast Financials (Combined Interactive Chart)
+    # 2. Historical vs. Forecast Financials (High-Contrast Pro Dark Chart)
     st.markdown("##### Historical vs. Forecast Trajectory (Revenue, EBITDA & FCFF)")
     
     fig_traj = go.Figure()
 
-    # Revenue: Historical (solid) & Forecast (dashed)
+    # Revenue: Historical (Solid Cyan) & Forecast (Dashed Sky Blue)
     fig_traj.add_trace(go.Scatter(
         x=hist_years, y=sales_hist, mode='lines+markers', name='Revenue (Actual)',
-        line=dict(color='#0f172a', width=2.5), marker=dict(size=6),
+        line=dict(color='#38bdf8', width=2.8), marker=dict(size=6, color='#38bdf8'),
         hovertemplate="FY %{x}<br>Actual Revenue: ₹%{y:,.0f} Cr<extra></extra>"
     ))
     fig_traj.add_trace(go.Scatter(
         x=[hist_years[-1]] + future_years, y=[sales_hist[-1]] + sales_fc, mode='lines+markers', name='Revenue (Forecast)',
-        line=dict(color='#2563eb', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond'),
+        line=dict(color='#60a5fa', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond', color='#60a5fa'),
         hovertemplate="FY %{x}<br>Forecast Revenue: ₹%{y:,.0f} Cr<extra></extra>"
     ))
 
-    # EBITDA: Historical (solid) & Forecast (dashed)
+    # EBITDA: Historical (Solid Mint) & Forecast (Dashed Green)
     fig_traj.add_trace(go.Scatter(
         x=hist_years, y=ebitda_hist, mode='lines+markers', name='EBITDA (Actual)',
-        line=dict(color='#475569', width=2), marker=dict(size=5),
+        line=dict(color='#10b981', width=2.2), marker=dict(size=5, color='#10b981'),
         hovertemplate="FY %{x}<br>Actual EBITDA: ₹%{y:,.0f} Cr<extra></extra>"
     ))
     fig_traj.add_trace(go.Scatter(
         x=[hist_years[-1]] + future_years, y=[ebitda_hist[-1]] + ebitda_fc, mode='lines+markers', name='EBITDA (Forecast)',
-        line=dict(color='#0d9488', width=2, dash='dash'), marker=dict(size=5, symbol='diamond'),
+        line=dict(color='#34d399', width=2.0, dash='dash'), marker=dict(size=5, symbol='diamond', color='#34d399'),
         hovertemplate="FY %{x}<br>Forecast EBITDA: ₹%{y:,.0f} Cr<extra></extra>"
     ))
 
-    # FCFF: Forecast
+    # FCFF: Forecast (Bright Lavender)
     fig_traj.add_trace(go.Scatter(
         x=future_years, y=fcff_fc, mode='lines+markers', name='FCFF (Forecast)',
-        line=dict(color='#7c3aed', width=2, dash='dot'), marker=dict(size=6, symbol='triangle-up'),
+        line=dict(color='#c084fc', width=2.2, dash='dot'), marker=dict(size=6, symbol='triangle-up', color='#c084fc'),
         hovertemplate="FY %{x}<br>Projected FCFF: ₹%{y:,.0f} Cr<extra></extra>"
     ))
 
@@ -525,20 +547,20 @@ with tab_forecast:
     fig_traj.add_vline(
         x=hist_years[-1],
         line_width=1.5,
-        line_dash="dot",
-        line_color="#94a3b8"
+        line_dash="dash",
+        line_color="#64748b"
     )
 
-    # Shaded forecast horizon
+    # Shaded forecast horizon with clean tint
     fig_traj.add_vrect(
         x0=hist_years[-1],
         x1=future_years[-1],
-        fillcolor="rgba(37, 99, 235, 0.05)",
+        fillcolor="rgba(56, 189, 248, 0.08)",
         layer="below",
         line_width=0,
-        annotation_text="5-Yr Forecast Horizon",
+        annotation_text="Forecast Horizon →",
         annotation_position="top left",
-        annotation_font=dict(size=10, color="#64748b")
+        annotation_font=dict(size=11, color="#94a3b8", family="Inter, sans-serif")
     )
 
     apply_market_theme(
@@ -548,41 +570,48 @@ with tab_forecast:
         xaxis_title="Fiscal Period",
         yaxis_title="Amount (₹ Cr.)"
     )
+    fig_traj.update_xaxes(tickangle=-25)
     st.plotly_chart(fig_traj, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
-    # 3. Scenario Analysis Chart (Base, Bull, Bear)
+    # 3. Scenario Analysis Chart (Base vs. Bull vs. Bear with Dynamic Scaling)
     st.markdown("##### Revenue Scenario Analysis (Base vs. Bull vs. Bear)")
     sales_bull = fc_results['scenarios']['bull']['sales']
     sales_bear = fc_results['scenarios']['bear']['sales']
 
     fig_scen = go.Figure()
-    # Bull Case
+    # Bull Case (Vivid Emerald)
     fig_scen.add_trace(go.Scatter(
         x=future_years, y=sales_bull, mode='lines+markers', name='Bull Case (+0.5σ)',
-        line=dict(color='#10b981', width=1.8, dash='dot'), marker=dict(size=5),
+        line=dict(color='#22c55e', width=2.0, dash='dot'), marker=dict(size=6, color='#22c55e'),
         hovertemplate="FY %{x}<br>Bull Sales: ₹%{y:,.0f} Cr<extra></extra>"
     ))
-    # Bear Case
+    # Bear Case (Vivid Coral)
     fig_scen.add_trace(go.Scatter(
         x=future_years, y=sales_bear, mode='lines+markers', name='Bear Case (-0.5σ)',
-        line=dict(color='#ef4444', width=1.8, dash='dot'), marker=dict(size=5),
-        fill='tonexty', fillcolor='rgba(37, 99, 235, 0.07)',
+        line=dict(color='#f43f5e', width=2.0, dash='dot'), marker=dict(size=6, color='#f43f5e'),
+        fill='tonexty', fillcolor='rgba(56, 189, 248, 0.1)',
         hovertemplate="FY %{x}<br>Bear Sales: ₹%{y:,.0f} Cr<extra></extra>"
     ))
-    # Base Case
+    # Base Case (Vivid Sky Blue)
     fig_scen.add_trace(go.Scatter(
         x=future_years, y=sales_fc, mode='lines+markers', name='Base Case',
-        line=dict(color='#2563eb', width=2.5), marker=dict(size=7),
+        line=dict(color='#38bdf8', width=3.0), marker=dict(size=8, color='#38bdf8'),
         hovertemplate="FY %{x}<br>Base Sales: ₹%{y:,.0f} Cr<extra></extra>"
     ))
 
+    # Dynamic Y-axis scale to clearly highlight scenario spreads
+    y_all = sales_bull + sales_bear + sales_fc
+    y_min, y_max = min(y_all), max(y_all)
+    y_padding = max(100.0, (y_max - y_min) * 0.35)
+
     apply_market_theme(
         fig_scen,
-        height=340,
+        height=360,
         show_legend=True,
         xaxis_title="Forecast Fiscal Period",
         yaxis_title="Sales (₹ Cr.)"
     )
+    fig_scen.update_layout(yaxis=dict(range=[max(0.0, y_min - y_padding), y_max + y_padding]))
     st.plotly_chart(fig_scen, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
     # Econometric Backtesting Selection Details
@@ -613,7 +642,7 @@ with tab_valuation:
             f"Valuation results are highly sensitive to Terminal Growth ({g_data['terminal_growth_pct']}%) and WACC ({wacc_pct}%)."
         )
 
-    # Enterprise Value to Equity Value Waterfall Bridge
+    # 4. Enterprise Value to Equity Value Waterfall Bridge (High-Contrast White Text)
     st.markdown("##### Enterprise Value to Equity Value Bridge")
     cum_fcf = val_results['valuation_bridge']['cumulative_pv_fcff_cr']
     pv_tv = g_data['pv_terminal_value_cr']
@@ -627,13 +656,15 @@ with tab_valuation:
         orientation="v",
         measure=["relative", "relative", "total", "relative", "relative", "total"],
         x=["PV of 5-Yr FCFF", "PV of Terminal Value", "Enterprise Value", "(+) Cash & Inv.", "(-) Total Debt", "Equity Value"],
-        textposition="outside",
+        textposition="inside",
+        insidetextanchor="middle",
+        textfont=dict(color="#ffffff", size=12, family="Inter, sans-serif"),
         text=[f"₹{cum_fcf:,.0f}", f"₹{pv_tv:,.0f}", f"₹{ev:,.0f}", f"₹{cash:,.0f}", f"-₹{debt:,.0f}", f"₹{eq_val:,.0f}"],
         y=[cum_fcf, pv_tv, ev, cash, -debt, eq_val],
-        connector={"line": {"color": "#94a3b8"}},
-        increasing={"marker": {"color": "#0d9488"}},
-        decreasing={"marker": {"color": "#dc2626"}},
-        totals={"marker": {"color": "#0f172a"}}
+        connector={"line": {"color": "#64748b", "width": 1.5}},
+        increasing={"marker": {"color": "#10b981"}},
+        decreasing={"marker": {"color": "#f43f5e"}},
+        totals={"marker": {"color": "#6366f1"}}
     ))
     apply_market_theme(
         fig_wf,
@@ -712,7 +743,7 @@ with tab_sensitivity:
         fig_hm1.update_traces(
             text=text_g,
             texttemplate="%{text}",
-            textfont={"size": 11, "family": "Inter, sans-serif"},
+            textfont={"size": 11, "family": "Inter, sans-serif", "color": "#ffffff"},
             hovertemplate="WACC: %{x}<br>Growth (g): %{y}<br>Target Price: %{text}<extra></extra>"
         )
         apply_market_theme(fig_hm1, height=380, show_legend=False)
@@ -734,7 +765,7 @@ with tab_sensitivity:
         fig_hm2.update_traces(
             text=text_m,
             texttemplate="%{text}",
-            textfont={"size": 11, "family": "Inter, sans-serif"},
+            textfont={"size": 11, "family": "Inter, sans-serif", "color": "#ffffff"},
             hovertemplate="WACC: %{x}<br>Exit Multiple: %{y}<br>Target Price: %{text}<extra></extra>"
         )
         apply_market_theme(fig_hm2, height=380, show_legend=False)
@@ -809,23 +840,23 @@ with tab_statements:
     if hist_vals is not None:
         fig_metric.add_trace(go.Scatter(
             x=hist_years, y=hist_vals, mode='lines+markers', name='Audited Historical',
-            line=dict(color='#0f172a', width=2.5), marker=dict(size=6),
+            line=dict(color='#38bdf8', width=2.8), marker=dict(size=6, color='#38bdf8'),
             hovertemplate=f"FY %{{x}}<br>Actual: %{{y:,.1f}} {unit_label}<extra></extra>"
         ))
         fig_metric.add_trace(go.Scatter(
             x=[hist_years[-1]] + future_years, y=[hist_vals[-1]] + fc_vals, mode='lines+markers', name='Projected Forecast',
-            line=dict(color='#2563eb', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond'),
+            line=dict(color='#818cf8', width=2.5, dash='dash'), marker=dict(size=6, symbol='diamond', color='#818cf8'),
             hovertemplate=f"FY %{{x}}<br>Projected: %{{y:,.1f}} {unit_label}<extra></extra>"
         ))
-        fig_metric.add_vline(x=hist_years[-1], line_width=1.5, line_dash="dot", line_color="#94a3b8")
+        fig_metric.add_vline(x=hist_years[-1], line_width=1.5, line_dash="dash", line_color="#64748b")
         fig_metric.add_vrect(
-            x0=hist_years[-1], x1=future_years[-1], fillcolor="rgba(37, 99, 235, 0.05)", layer="below", line_width=0,
-            annotation_text="Forecast Horizon", annotation_position="top left", annotation_font=dict(size=10, color="#64748b")
+            x0=hist_years[-1], x1=future_years[-1], fillcolor="rgba(56, 189, 248, 0.08)", layer="below", line_width=0,
+            annotation_text="Forecast Horizon →", annotation_position="top left", annotation_font=dict(size=11, color="#94a3b8", family="Inter, sans-serif")
         )
     else:
         fig_metric.add_trace(go.Scatter(
             x=future_years, y=fc_vals, mode='lines+markers', name='Projected Forecast',
-            line=dict(color='#2563eb', width=2.5), marker=dict(size=6),
+            line=dict(color='#818cf8', width=2.8), marker=dict(size=6, color='#818cf8'),
             hovertemplate=f"FY %{{x}}<br>Projected: %{{y:,.1f}} {unit_label}<extra></extra>"
         ))
 
@@ -837,6 +868,7 @@ with tab_statements:
         xaxis_title="Fiscal Period",
         yaxis_title=f"{selected_metric} ({unit_label})"
     )
+    fig_metric.update_xaxes(tickangle=-25)
     st.plotly_chart(fig_metric, use_container_width=True, config={'displayModeBar': True, 'displaylogo': False})
 
     # Full 5-Year Statement Table
